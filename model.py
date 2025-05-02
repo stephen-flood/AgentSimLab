@@ -6,6 +6,7 @@ from google.genai import types
 from datetime import datetime
 import time
 import requests
+import yaml # Used to quickly format prompts
 
 ## Import API key from Colab into OS environment
 ## (Required for code to load key from OS environment later)
@@ -63,8 +64,7 @@ class GeminiModel:
       - Have a `apply_tool` function that runs the relevant stored function
         definition on the tool identified byt he model
   """
-
-  def __init__(self, model_name, rate_limit_minutes, rate_limit_daily):
+  def __init__(self, model_name="gemini-2.0-flash-lite", rate_limit_minutes=30, rate_limit_daily=1000):
     self.model_name = model_name
     self.rate_limit_minutes = rate_limit_minutes
     self.rate_limit_daily = rate_limit_daily
@@ -254,11 +254,12 @@ class GeminiModel:
         ]
       )
 
+      # given a TEXT STRING name
       self.tool_registry[name] = {
-        "function" : func,
-        "tool_object" : tool_object,
-        "description" : description,
-        "parameters" : parameters,
+        "function" : func, # Actual function to be called
+        "tool_object" : tool_object, # Tool object for LLM call
+        "description" : description, # text description
+        "parameters" : parameters,   # dictionary of text attributes
       }
       return tool_object
 
@@ -268,7 +269,7 @@ class GeminiModel:
     else:
       print(f"Tool {name} not registered")
       return None
-
+  
   def apply_tool(self, response):
     call_results = []
     if response.function_calls==None:
@@ -294,3 +295,35 @@ class GeminiModel:
     else:
       print(response.function_calls)
 
+
+class Prompt:
+  """
+  Assembles and formats prompts with containing the following parts
+  persona, context, instruction, input, tone, output_format, examples
+  """
+  def __init__(self, **kwargs):
+    # self.details = []
+    # self.details.append({"Instruction" : instruction })
+    self.details = {}
+
+    # Put standard prompt elements in a specific order
+    prompt_elements = ["persona","context","instruction","input","tone","output_format","examples"]
+    for element in prompt_elements:
+      if element in kwargs:
+        name = element.title()
+        name = name.replace("_"," ")
+        # self.details.append({name: kwargs[element]})
+        self.details[name] = kwargs[element]
+
+    # Add all other prompt elements to the end 
+    for key,val in kwargs.items():
+      if key not in prompt_elements:
+        self.details[key] = val
+
+  def generate(self):
+    # return yaml.dump(self.details, sort_keys=False)
+    prompt = yaml.dump(self.details, sort_keys=False)
+    # Repeat the instruction at the end for emphasis
+    if "instruction" in self.details:
+      prompt += f"\nRemember: the instruction is {self.details['instruction']}"
+    return prompt

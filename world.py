@@ -36,6 +36,9 @@ class Location:
     self.people = people_present
     self.adjacent_locations = adjacent_locations
 
+  def __str__(self):
+     return self.name
+
   def add_adjacent_location(self, location):
     self.adjacent_locations.append(location)
 
@@ -130,7 +133,7 @@ class World:
 
     for agent_dict in agent_description_list:
       name = agent_dict["name"]
-      traits = agent_dict["traits"]
+      persona = agent_dict["persona"]
       status = agent_dict["status"]
       if "location" in agent_dict:
         loc_name = agent_dict["location"]
@@ -138,7 +141,12 @@ class World:
         for location in self.locations:
           if location.name == loc_name:
             # print("adding agent to location", loc_name)
-            agent = SimpleAgent(name, traits, status, SimpleMemory(), self.model, location)
+            agent = SimpleAgent(name, 
+                                traits=persona, 
+                                status=status, 
+                                memory=SimpleMemory(), 
+                                model=self.model,
+                                location=location)
             self.add_agent(agent)
             location.add_person(agent)
             break
@@ -236,3 +244,15 @@ class World:
           return f"Agent {agent_name} not found."
       names = ', '.join(p.name for p in loc.people if p.name != agent_name) or "no-one"
       return f"You are in the {loc.name}. People here: {names}."
+
+
+class Simulation:
+   
+  def __init__(self, agent_description_list, location_list,  adjacency_list, freemodel ):
+      self.world = World()
+      self.world.create_world_from_names( location_list , agent_description_list , freemodel )
+      self.world.read_adjacency_list(adjacency_list)
+
+  def forward():
+      pass 
+   

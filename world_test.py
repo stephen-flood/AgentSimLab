@@ -7,10 +7,10 @@ freemodel = GeminiModel("gemini-2.0-flash-lite", 30, 1000)
 
 location_list = ["living", "kitchen", "bathroom", "bedroom","office","garden"]
 agent_description_list = [
-  {"name": "Susan", "status": "working", "traits": "tired", "location": "living"},
-  {"name": "Bob", "status": "cooking", "traits": "lazy", "location": "kitchen"},
-  {"name": "Timmy", "status": "playing", "traits": "active", "location": "garden"},
-  {"name": "Catherine", "status": "curious", "traits": "focused", "location": "office"},
+  {"name": "Susan", "status": "working", "persona": "tired", "location": "living"},
+  {"name": "Bob", "status": "cooking", "persona": "lazy", "location": "kitchen"},
+  {"name": "Timmy", "status": "playing", "persona": "active", "location": "garden"},
+  {"name": "Catherine", "status": "curious", "persona": "focused", "location": "office"},
 ]
 adjacency_list = [("living","kitchen"),
                   ("living","bathroom"),
@@ -56,8 +56,11 @@ tools = [move_tool, describe_tool]
 
 
 susan = world.get_agent("Susan")
-response = susan.respond("You are a tool calling agent simulating Susan.  You can call get_current_room_description and move_to_location.  Wander amlessly thorugh the building.", tools=tools)
+# response = susan.respond("Wander amlessly thorugh the building.", tools=tools)
+response = susan.generate_speech(instruction="Wander amlessly thorugh the building.", tools=tools)
 print(response)
+# response = susan.respond("You are a tool calling agent simulating Susan.  You can call get_current_room_description and move_to_location.  Wander amlessly thorugh the building.", tools=tools)
+# print(response)
 
 # print("Moving Susan")
 # susan = world.get_agent("Susan")
