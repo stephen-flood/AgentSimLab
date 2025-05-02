@@ -35,6 +35,8 @@ class SimpleMemory:
   ## Do this if a SimpleMemory object is converted to a string
   ##  or used in a string context
   def __str__(self):
+    if len(self._store) == 0 :
+      return "N/A"
     return yaml.dump(self.retrieve_recent_memories(-1),sort_keys=False)
 
   def add_memory(self, text: str) -> None:
@@ -108,8 +110,14 @@ class SimpleAgent:
     IMPORTANT:
       - (all objects stored in attribute_dictionary MUST have a __str__ method).
     """
+    # model_params = kwargs["model_parameters"] if "model_parameters" in kwargs else {}
     special_args = ["model_parameters"]
-    model_params = kwargs["model_parameters"] if "model_parameters" in kwargs else {}
+    if "model_parameters" in kwargs:
+      model_params = kwargs["model_parameters"] 
+    elif "tools" in kwargs:
+      model_params = {"tools":kwargs["tools"]}
+    else:
+      model_params = {}
 
     arg_dict = {key:str(val) for key,val in kwargs.items() if key not in special_args }
     attribute_dict = {key:str(val) for key,val in self.attribute_dictionary.items()}
@@ -119,6 +127,7 @@ class SimpleAgent:
     prompt = Prompt(**prompt_dictionary)
     prompt = prompt.generate()
     # print(prompt)
+    # print(model_params)
     response = self.model.generate_content(user_prompt=prompt, **model_params)
     return response
 
@@ -134,8 +143,12 @@ class SimpleAgent:
     prompt_dict["name"] = self.name
     prompt_dict["description"] = self.description() 
     
-    prompt_dict["instruction"] = f"What would {self.name} do? "\
-                                  "State the action and describe its results."
+    # prompt_dict["instruction"] = f"What would {self.name} do? "\
+    #                               "State the action and describe its results."
+    prompt_dict["instruction"] = f"What would {self.name} do? "
+    
+    if "system" not in kwargs and "tools" in kwargs: 
+      prompt_dict["system"] = f"You are {self.model.model_name}, a tool using model from Google. Use tools when needed."
 
     if "location" in self.attribute_dictionary:
       prompt_dict["location description"] = self.attribute_dictionary["location"].description()
@@ -170,7 +183,8 @@ class SimpleAgent:
     description = {
       "Agent Name": self.name,
     }
-    description = description | self.attribute_dictionary
+    str_attribute_dict = {key:str(val) for key,val in self.attribute_dictionary.items()}
+    description = description | str_attribute_dict
     # if "location" is not None:
     #   description["Location"] = self.location.name
     return description
@@ -180,34 +194,48 @@ class SimpleAgent:
   def description(self):
     return yaml.dump(self.description_dictionary())
 
+  def get_location(self):
+    return self.attribute_dictionary["location"] if "location" in self.attribute_dictionary else None
 
   def set_location(self, location):
-    self.location = location
+    self.attribute_dictionary["location"] = location
 
 
   ## Copied from "GoogleModel" definition
   ## Needed here for simulations, where the actions that can be taken
   ## will depend on the agent calling them 
-  def apply_tool_calls(self, response):
+  def apply_agent_tool(self, response):
 
-    call_results = []
     if response.function_calls==None:
-      call_results.append(("No Tool Calls",""))
-      return call_results
+      return "No tool calls"
+    
+    # for call in response.function_calls:
+    #   args = call.args
+    #   if "agent" in args:
+    #     raise ValueError("LLM cannot set acting agent")
+    #   else:
+    #     args["agent"] = self
 
-    for call in response.function_calls:
-      name = call.name
-      args = call.args
-      if "agent" in args:
-        print("Error: Model cannot set acting agent")
-        exit
-      else:
-        args["agent"] = self
-      if name in self.model.tool_registry:
-        func = self.model.tool_registry[name]["function"]
-        result = func(**args)
-        call_results.append((result, call))
-      else:
-        print(f"Tool {name} not registered in {call}")
-    return call_results
+    return self.model.apply_tool(response, agent=self)
+
+    # call_results = []
+    # if response.function_calls==None:
+    #   call_results.append(("No Tool Calls",""))
+    #   return call_results
+
+    # for call in response.function_calls:
+    #   name = call.name
+    #   args = call.args
+    #   if "agent" in args:
+    #     print("Error: Model cannot set acting agent")
+    #     exit
+    #   else:
+    #     args["agent"] = self
+    #   if name in self.model.tool_registry:
+    #     func = self.model.tool_registry[name]["function"]
+    #     result = func(**args)
+    #     call_results.append((result, call))
+    #   else:
+    #     print(f"Tool {name} not registered in {call}")
+    # return call_results
 

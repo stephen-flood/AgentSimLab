@@ -22,7 +22,7 @@ freemodel = GeminiModel("gemini-2.0-flash-lite", 30, 1000)
 cust = SimpleAgent("Customer",
                    persona = "impatient, tech‑savvy",
                    status = "has a phone that keeps restarting",
-                   workflow = "explain the issue.  attempt to follow the instructions.  Only accept the resolution if the phone works or you get a refund.",
+                   workflow = "Explain the issue.  Attempt to follow the instructions.  ALWAYS use `check` tool before saying whether the phone is still broken.  Only accept the resolution if the phone works or you get a refund.",
                    memory = mem_customer,
                    model = freemodel)
 sup  = SimpleAgent("SupportAgent",
@@ -50,7 +50,7 @@ observation = 'Customer says: "My jPhone-72 phone keeps rebooting!"'
 mem_customer.add_memory(observation)
 mem_support.add_memory(observation)
 print(observation,"\n")
-for _ in range(5) :
+for _ in range(3) :
     # cont, sup_line = sup.respond(observation)
     # sup_line = sup.generate_speech(observation = observation )
     # sup_line = sup.generate_content(observation = observation , 

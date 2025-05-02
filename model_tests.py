@@ -68,7 +68,10 @@ sample_prompt = Prompt(persona = "You are an angry, defensive employee.",
                        context="Your boss just said hello to you",
                        memory="You didn't sleep well last night.  You have been working hard on a project.  You think the project is going really well.",
                        instruction="What do you say?")
+print("Prompt Object",sample_prompt)
+import yaml
+print("Yaml dump", yaml.dump(sample_prompt.details))
 prompt_text = sample_prompt.generate()
-print(prompt_text)
+print("Prompt Text", prompt_text)
 response = freemodel.generate_content(user_prompt=prompt_text)
 pprint.pp(response.text)

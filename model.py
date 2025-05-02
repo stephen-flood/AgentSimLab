@@ -104,6 +104,7 @@ class GeminiModel:
     else:
       print("Error: no query given")
     # Keep track of queries to prevent rate limiting
+    # print(contents)
     self.rate_limit_tracker.log_query()
     wait_time = self.rate_limit_tracker.time_to_wait()
     if wait_time > 0:
@@ -270,7 +271,11 @@ class GeminiModel:
       print(f"Tool {name} not registered")
       return None
   
-  def apply_tool(self, response):
+  def apply_tool(self, response, **kwargs):
+    """
+    Apply the tool with parameters set by the tool call
+    Specify additional hardcoded parameters with kwargs
+    """
     call_results = []
     if response.function_calls==None:
       call_results.append(("No Tool Calls",""))
@@ -279,6 +284,7 @@ class GeminiModel:
     for call in response.function_calls:
       name = call.name
       args = call.args
+      args = args | kwargs
       if name in self.tool_registry:
         func = self.tool_registry[name]["function"]
         result = func(**args)
