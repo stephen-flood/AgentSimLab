@@ -52,7 +52,8 @@ class Location:
 
     person_descriptions=[]
     for person in self.people:
-      person_descriptions.append( person.description_dictionary() )
+      # person_descriptions.append( person.description_dictionary() )
+      person_descriptions.append(person.name)
 
     description = {
        self.name : {

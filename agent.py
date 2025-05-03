@@ -124,10 +124,11 @@ class SimpleAgent:
     prompt_dict["name"] = self.name
     prompt_dict["description"] = self.description() 
     
-    prompt_dict["instruction"] = f"First, identify what would {self.name} do.  Then make a VERY SHORT plan to achieve those goals.  Find a SMALL NUMBER of concrete steps that can be taken."
+    prompt_dict["instruction"] = f"First, identify what would {self.name} do.  Then make a very short plan to achieve those goals.  Find a SMALL NUMBER of concrete steps that can be taken.  Take available tools into account in your planning, but DO NOT do any tool calls."
     
     if "location" in self.attribute_dictionary:
-      prompt_dict["location description"] = self.attribute_dictionary["location"].description()
+      # prompt_dict["location description"] = self.attribute_dictionary["location"].description()
+      prompt_dict["current location"] = self.attribute_dictionary["location"].name
 
     response = self.generate_content(**prompt_dict)    
 
