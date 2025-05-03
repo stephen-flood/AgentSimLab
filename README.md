@@ -1,4 +1,24 @@
-# OpenSimLab Quick‑Start Guide
+# OpenSimLab 
+
+- Written spring of 2025. 
+- Prompting approach inspired by an approach I found (somewhere), where all the prompts were things like
+        Persona: friendly
+        Instruction: run fast
+    Thus the agent approach just takes in an arbitrary dictionary of attributes, and the prompt is the `yaml.dump` of the values.
+- *Documentation written by o3, 5/3/25*
+    - Has not been double checked, use with care. 
+    - It was a huge pain to get it to output the markdown because all the code snippets broke their chat interface
+    - Eventually, the following prompt worked: 
+        Perfect.  Now I need this EXACT content in a file that I can download.
+
+        The file I want is UNUSUAL.  
+        TEXT content should be rendered in markdown
+        CODE should be placed between <CODE> and </CODE> delimiters.
+
+        NEVER use a triple backtick when outputting your answer 
+
+# Quick‑Start Guide
+
 A lightweight, hack‑friendly sandbox for multi‑agent simulations built on top of Google Gemini.  
 This guide shows **(1) how to use `GeminiModel` for basic chat / multimodal inference** and **(2) how to build and run simple simulations**.  
 It is aimed at undergraduates encountering LLMs for the first time, so every section comes with runnable code snippets.
