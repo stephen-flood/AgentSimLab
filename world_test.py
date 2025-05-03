@@ -30,40 +30,43 @@ world.print()
 
 
 
+def get_room_description(**kwargs) ->str:
+    required_args=["agent"]
+    if any( arg not in kwargs for arg in required_args):
+        print(f"Error: missing argument in {kwargs}.  Required arguments: {required_args}.")
+        return False
+    else: 
+        agent = kwargs["agent"]
+    print(f"{agent.name} looks around.")
+    return agent.get_location().description()
+describe = freemodel.register_tool(
+    func=get_room_description,
+    description="You look around your current room to see who or what is in it, and what is nearby.",
+    parameters={
+    }
+)
 
-# Define function and register tool
-# NOTE: you need to use the AGENT's version of `apply_tool_calls`
-# This will *INSERT* the correct agent parameter (hidden from the LLM)
-# def move_to_location(dest: str, agent: SimpleAgent) -> str:
-#     return agent.move(dest)
-# move_tool = freemodel.register_tool(
-#     func=move_to_location,
-#     description="Moves you to an adjacent room.",
-#     parameters={
-#         "dest":       {"type": "string", "description": "An adjacent room."},
-#     }
-# )
-
-# def get_current_room_description(agent : SimpleAgent) -> str:
-#     return agent.location.description()
-# describe_tool = freemodel.register_tool(
-#     func=get_current_room_description,
-#     description="Describes your current room and who is there.",
-#     parameters={
-#     }
-# )
-# tools = [move_tool, describe_tool]
-
+# (1) The function you will run to perform the action. 
+#       Note: You do NOT need to advertise all arguments to the LLM
 def move_tool(**kwargs) -> str:
-    destination = kwargs["destination"] 
-    agent = kwargs["agent"]
-
-    # assumes each Location has a back-reference `world`
-    world = agent.get_location().world
-    world.move(agent=agent, dest_name=destination)
-    return f"{agent.name} moved to {destination}."
-
-# 2) Registration with the model
+    # Check required inputs
+    required_args = ["destination","agent","world"]
+    if any( arg not in kwargs for arg in required_args):
+        print(f"Error: missing argument in {kwargs}.  Required arguments: {required_args}.")
+        return False
+    else:
+        destination = kwargs["destination"] 
+        agent = kwargs["agent"]
+        world = kwargs["world"]
+    result = world.move(agent=agent, dest_name=destination)
+    # Check whether move was valid or invalid
+    if "Warning" in result:
+        print(result)
+        return result
+    else:
+        print( f"{agent.name} moved to {destination}.")
+        return result
+# (2) Register tool with the model
 move = freemodel.register_tool(
     func=move_tool,
     description="This function moves you from your current room to an adjacent room.",
@@ -74,35 +77,76 @@ move = freemodel.register_tool(
         }
     }
 )
-tools=[move]
+# tools=[move]
+tools=[move,describe]
 
-memory = "I am falling asleep. I need coffee to able to keep going, but there is no coffee here. "
+## Prompt (trying) to trigger `movement`
+# observation = "I am falling asleep. I need coffee to able to keep going, but there is no coffee here. "
+## Prompt (trying) to trigger `describe`
+observation = "I am falling asleep. Is there any coffee in in my mug?"
+
 susan = world.get_agent("Susan")
-# response = susan.respond("Wander amlessly thorugh the building.", tools=tools)
-response = susan.generate_speech(memory=memory, tools=tools)
-print(response)
-memory += response
+susan.add_memory("Observation: " + str(observation))
 
-# 3) Use in agent.generate_action
-response = susan.generate_action(
-    # tools=[freemodel.get_tool("move_tool")],
+plan = susan.generate_plan()
+susan.add_memory("Plan: " + str(plan))
+
+# response = susan.generate_speech(tools=tools)
+# print("speech:", response)
+# observation += response
+
+# (3) Supply tool objects during agent.generate_action
+act = susan.generate_action(
     tools=tools,
-    memory = memory,
-    # system = "You are a tool calling model.  You MUST call one of your tools.",
-    # instruction="Move to the *kitchen*. That means call `move_tool` with argument `kitchen`.",
+    memory = observation,
 )
-print(response)
-response = susan.apply_agent_tool(response)
-# memory += response
-print(response)
+if act.function_calls is not None:
+    for call in act.function_calls:
+        intended_action = f"Calling {call.name} with arguments {call.args}"
+        susan.add_memory("Attempting Action: " + intended_action)
 
-# response = susan.respond("You are a tool calling agent simulating Susan.  You can call get_current_room_description and move_to_location.  Wander amlessly thorugh the building.", tools=tools)
-# print(response)
+# (4) Use model.apply_tool.  Remember to supply all "hidden" arguments, not advertised to the model
+observe = freemodel.apply_tool(act, world=world, agent=susan)
+for result in observe:
+    susan.add_memory("Observation: " + str(result[0]))
 
-# print("Moving Susan")
+# world.print()
+
+print(susan.description())
+
+# ## Prompt (trying) to trigger `movement`
+# # observation = "I am falling asleep. I need coffee to able to keep going, but there is no coffee here. "
+# ## Prompt (trying) to trigger `describe`
+# observation = "I am falling asleep. Is there any coffee here?"
+
 # susan = world.get_agent("Susan")
-# for i in range(10):
-#     response = susan.respond("Wander amlessly thorugh the building.  Use tool calling.", tools=tools)
-#     print(response)
-#     print(susan.location.name)
-# print(tools)
+
+# plan = susan.generate_plan(memory=observation,tools=tools)
+# print("plan", plan)
+
+# memory = memory + "\n" + plan
+
+# response = susan.generate_speech(memory=observation, tools=tools)
+# print("speech:", response)
+# observation += response
+
+# # (3) Supply tool objects during agent.generate_action
+# response = susan.generate_action(
+#     tools=tools,
+#     memory = observation,
+# )
+# # (4) Use model.apply_tool.  Remember to supply all "hidden" arguments, not advertised to the model
+# response = freemodel.apply_tool(response, world=world, agent=susan)
+
+# world.print()
+
+# # response = susan.respond("You are a tool calling agent simulating Susan.  You can call get_current_room_description and move_to_location.  Wander amlessly thorugh the building.", tools=tools)
+# # print(response)
+
+# # print("Moving Susan")
+# # susan = world.get_agent("Susan")
+# # for i in range(10):
+# #     response = susan.respond("Wander amlessly thorugh the building.  Use tool calling.", tools=tools)
+# #     print(response)
+# #     print(susan.location.name)
+# # print(tools)

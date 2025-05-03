@@ -261,15 +261,16 @@ class World:
       dest = self.get_location(dest_name)
       if dest is str:
          # No location was found, so return the error message.
-         return dest
+         print(f"Warning: no location of name {dest} found")
+         return False
 
       start = agent.get_location()
       if dest not in start.adjacent_locations:
-          return f"{dest_name} is not reachable from {start.name}."
+          print(f"Warning: {dest_name} is not reachable from {start.name}.")
       start.remove_person(agent)
       dest.add_person(agent)
       agent.set_location( dest )
-      return f"{agent.name} moved from {start.name} to {dest.name}."
+      return f"Success: {agent.name} moved from {start.name} to {dest.name}."
 
   def describe_room(self, agent: SimpleAgent) -> str:
       location = agent.get_location()

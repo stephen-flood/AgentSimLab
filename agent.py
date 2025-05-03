@@ -3,27 +3,7 @@ import re # Parse model response to decide if we should end the conversation.
           # TODO: replace this with a tool call?
 from datetime import datetime
 from model import GeminiModel, Prompt, RateLimitTracker
-
-## Use to export dictionaries/lists in nice readable format
-#pip install pyyaml
 import yaml 
-
-## Formatting output
-try :
-  # pip install rich
-  # from rich import print
-  from rich import Console
-  def show(speaker, text):
-      from rich.console import Console
-      console = Console()          # auto‑detects terminal width
-      console.print(f"[bold cyan]{speaker}[/]: {text}")   # auto‑wraps & colours
-      #
-      # print(f"[bold]{speaker}[/]: {text}")   # auto‑wraps & colours
-except:
-  def show(speaker, text):
-      print(f"*{speaker}*: {text}")  
-  pass 
-
 
 ## Basic Memory Class (modified, simplified more)
 class SimpleMemory:
@@ -92,6 +72,13 @@ class SimpleAgent:
 
   def __str__(self):
     return self.description()
+  
+  def add_memory(self, memory_string):
+    if "memory" in self.attribute_dictionary:
+      self.attribute_dictionary["memory"].add_memory( memory_string )
+      return 
+    else:
+      raise ValueError(f"Error: {self.name} has no memory object to store {memory_string}")
 
   def generate_content(self,**kwargs):
     """
@@ -132,8 +119,20 @@ class SimpleAgent:
     return response
 
 
-  def generate_plan(self,**kwargs):
-    pass
+  def generate_plan(self,**kwargs):    
+    prompt_dict = kwargs
+    prompt_dict["name"] = self.name
+    prompt_dict["description"] = self.description() 
+    
+    prompt_dict["instruction"] = f"First, identify what would {self.name} do.  Then make a VERY SHORT plan to achieve those goals.  Find a SMALL NUMBER of concrete steps that can be taken."
+    
+    if "location" in self.attribute_dictionary:
+      prompt_dict["location description"] = self.attribute_dictionary["location"].description()
+
+    response = self.generate_content(**prompt_dict)    
+
+    return response.text
+
 
   def generate_action(self,**kwargs):
     """
@@ -176,8 +175,6 @@ class SimpleAgent:
     response = self.generate_content(**prompt_dict)    
     return response.text
 
-
-
   def description_dictionary(self):
     """Returns dictionary that can be printed with yaml.dump"""
     description = {
@@ -189,8 +186,6 @@ class SimpleAgent:
     #   description["Location"] = self.location.name
     return description
 
-
-
   def description(self):
     return yaml.dump(self.description_dictionary())
 
@@ -199,43 +194,3 @@ class SimpleAgent:
 
   def set_location(self, location):
     self.attribute_dictionary["location"] = location
-
-
-  ## Copied from "GoogleModel" definition
-  ## Needed here for simulations, where the actions that can be taken
-  ## will depend on the agent calling them 
-  def apply_agent_tool(self, response):
-
-    if response.function_calls==None:
-      return "No tool calls"
-    
-    # for call in response.function_calls:
-    #   args = call.args
-    #   if "agent" in args:
-    #     raise ValueError("LLM cannot set acting agent")
-    #   else:
-    #     args["agent"] = self
-
-    return self.model.apply_tool(response, agent=self)
-
-    # call_results = []
-    # if response.function_calls==None:
-    #   call_results.append(("No Tool Calls",""))
-    #   return call_results
-
-    # for call in response.function_calls:
-    #   name = call.name
-    #   args = call.args
-    #   if "agent" in args:
-    #     print("Error: Model cannot set acting agent")
-    #     exit
-    #   else:
-    #     args["agent"] = self
-    #   if name in self.model.tool_registry:
-    #     func = self.model.tool_registry[name]["function"]
-    #     result = func(**args)
-    #     call_results.append((result, call))
-    #   else:
-    #     print(f"Tool {name} not registered in {call}")
-    # return call_results
-

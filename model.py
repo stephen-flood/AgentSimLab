@@ -90,8 +90,7 @@ class GeminiModel:
         tools=tools, # Required for tool use
         response_mime_type="text/plain",
     )
-    # print("Using tools", tools)
-    # Build `contents`
+    # In google-genai query, `contents` list of "Content" and "Part" objects, plus maybe a single text string? 
     if "user_prompt" in kwargs:
       contents = [
           types.Content(
@@ -103,14 +102,13 @@ class GeminiModel:
       contents = kwargs["contents"]
     else:
       print("Error: no query given")
-    # Keep track of queries to prevent rate limiting
-    # print(contents)
+
     self.rate_limit_tracker.log_query()
     wait_time = self.rate_limit_tracker.time_to_wait()
     if wait_time > 0:
       print(f"Waiting {wait_time} seconds...")
       time.sleep(wait_time)
-    # Query model, return response
+
     response = self.client.models.generate_content(
         model=self.model_name,
         contents=contents,
@@ -284,6 +282,7 @@ class GeminiModel:
     for call in response.function_calls:
       name = call.name
       args = call.args
+      # Also include the user-specified arguments from kwargs
       args = args | kwargs
       if name in self.tool_registry:
         func = self.tool_registry[name]["function"]
