@@ -11,7 +11,7 @@ from agent  import SimpleAgent
 # from OpenSimLab.model import GeminiModel
 # from OpenSimLab.agent import SimpleAgent
 
-
+# (hacked together examples, cleaned up by o3)
 
 # ---------- 1.  Create model instance ---------------------------------------
 # model = GeminiModel("gemini-2.0-flash-lite", 25, 1000)
@@ -41,7 +41,7 @@ agents  = [
     {"name":"Catherine",
         "goal":"I need to TELL Timmy to do his homework. I need to find the LOCATION that contains Timmy. I should first CHECK if my CURRENT LOCATION.  If not I should MOVE to a new LOCATION to check if he is there. REMEMBER to alternate looking and moving.",
         "status":"curious",
-        # "persona":"focused",
+        # "persona":"focused", # TODO: Get rid of hardcoded 'persona', 'status', etc fields from SimpleAgent methods
         "persona":"explorer",
         "location":"office"},
 ]

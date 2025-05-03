@@ -38,7 +38,7 @@ class SimpleMemory:
 class Location:
   pass
 
-## Basic Agent Class (almost exactly o3's output)
+## Basic Agent Class (first draft by o3, then refactored)
 class SimpleAgent:
   def __init__(self,
                name:str ,
