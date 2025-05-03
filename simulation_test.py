@@ -3,8 +3,20 @@ from model  import GeminiModel
 from world  import World
 from agent  import SimpleAgent
 
+## If the library is a folder, import FILENAMES
+# from OpenSimLab import world, agent, model
+
+## If you want specific objects from each files, do this
+# from OpenSimLab.world import World
+# from OpenSimLab.model import GeminiModel
+# from OpenSimLab.agent import SimpleAgent
+
+
+
 # ---------- 1.  Create model instance ---------------------------------------
-model = GeminiModel("gemini-2.0-flash-lite", 30, 1000)
+# model = GeminiModel("gemini-2.0-flash-lite", 25, 1000)
+model = GeminiModel("gemini-2.0-flash", 15, 1000)
+# model = GeminiModel("gemini-2.5-flash-preview-04-17", 10, 1000)
 
 # ---------- 2.  Build the world ---------------------------------------------
 rooms   = ["living", "kitchen", "bathroom", "bedroom", "office", "garden"]
@@ -20,12 +32,12 @@ agents  = [
     #     "observation" : "I need to go outside."
     #     "status":"cooking",
     #     "persona":"lazy"  , 
-    #     "location":"kitchen"},
-    # {"name":"Timmy",
-    #     "observation":"I am getting thirsty.  I need to drink water.",
-    #     "status":"playing",
-    #     "persona":"active", 
-    #     "location":"garden"},
+        # "location":"kitchen"},
+    {"name":"Timmy",
+        "observation":"I am having a great time.",
+        "status":"playing",
+        "persona":"active", 
+        "location":"garden"},
     {"name":"Catherine",
         "goal":"I need to TELL Timmy to do his homework. I need to find the LOCATION that contains Timmy. I should first CHECK if my CURRENT LOCATION.  If not I should MOVE to a new LOCATION to check if he is there. REMEMBER to alternate looking and moving.",
         "status":"curious",
@@ -40,7 +52,8 @@ world = World(location_names=rooms, room_edges=edges,
 
 def get_room_description(**kwargs) ->str:
     try:
-        print(f"{kwargs["agent"].name} looks around.")
+        room_desc = kwargs["agent"].get_location().description()
+        print(f"{kwargs["agent"].name} looks around and sees {room_desc}.")
         return kwargs["agent"].get_location().description()
     except:
         err_msg = f"Error: missing argument for get_room_description in {kwargs}"
@@ -99,7 +112,7 @@ class Simulation:
         """One synchronous tick over all agents."""
         for agent in self.world.agents:         # assumes iterable interface
             print(f"--------- {agent.name} at step {self.t} ---------")
-            print(agent.description())
+            # print(agent.description())
             if self.t == 0:
                 plan = agent.generate_plan(tools=self.tools)
                 agent.add_memory("Plan: " + plan)
