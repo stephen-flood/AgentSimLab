@@ -9,6 +9,7 @@
     - Has not been double checked, use with care. 
     - It was a huge pain to get it to output the markdown because all the code snippets broke their chat interface
     - Eventually, the following prompt worked: 
+    ```
         Perfect.  Now I need this EXACT content in a file that I can download.
 
         The file I want is UNUSUAL.  
@@ -16,7 +17,7 @@
         CODE should be placed between <CODE> and </CODE> delimiters.
 
         NEVER use a triple backtick when outputting your answer 
-
+    ```
 # Quick‑Start Guide
 
 A lightweight, hack‑friendly sandbox for multi‑agent simulations built on top of Google Gemini.  
