@@ -75,3 +75,28 @@ prompt_text = sample_prompt.generate()
 print("Prompt Text", prompt_text)
 response = freemodel.generate_content(user_prompt=prompt_text)
 pprint.pp(response.text)
+
+
+print("____________________")
+from model import Prompt
+
+spec = {
+    "persona": "You are an adventurous marine biologist and gifted storyteller.",
+    "context": "You are recording a segment for a children's science podcast about the ocean.",
+    "instruction": "Explain why protecting coral reefs matters.",
+    "input": [
+        "Coral reefs support approximately 25% of all marine life",
+        "They act as natural breakwaters that protect coastlines from storms",
+        "Rising sea temperatures cause coral bleaching",
+        "Pollution and overfishing accelerate reef decline"
+    ],
+    "tone": "inspiring and vivid",
+    "output_format": "one paragraph of no more than 120 words"
+}
+
+prompt = Prompt(**spec)
+prompt_text = prompt.generate()
+print(prompt_text)      # inspect the YAML‑dump if curious
+
+response = freemodel.generate_content(user_prompt=prompt_text)  # the model will call Prompt for you
+print(response.text)

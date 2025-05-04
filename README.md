@@ -1,10 +1,16 @@
 # OpenSimLab 
 
 - Written spring of 2025. 
-- Prompting approach inspired by an approach I found (somewhere), where all the prompts were things like
-        Persona: friendly
-        Instruction: run fast
-    Thus the agent approach just takes in an arbitrary dictionary of attributes, and the prompt is the `yaml.dump` of the values.
+- Prompting approach inspired by an approach described in (for example) *LangChain in Action* $\text{\S}2$
+    - Key quotes from the Chapter Summary $\text{\S}2.7$:
+        - *As you create various prompts, you might notice a common prompt structure with sections like persona, context, instruction, input, steps, examples, etc.*
+        - *You should adapt the prompt structure to your use case by choosing relevant sections or adding custom ones. You can also drop some explicit section names*
+- `OpenSimLab` approach to prompting: 
+    - The `Prompt` class in `model.py` just takes in an arbitrary dictionary of attributes, and the prompt is the `yaml.dump` of the values.
+    - The `GeminiModel` class in `model.py` takes in an arbitrary dictionary of attributes which it passes directly to a `Prompt` class after extracting model specific arguments like `tools`
+    - The `SimpleAgent` class in `agent.py` implements three types of agent queries:
+        - `.generate_plan()`, `.generate_action()` and `.generate_speech()`
+        - Each of these methods generates a specialized "Instruction" argument, which it passes to `model.genrate` (and eventually to the `Prompt` class) along with an arbitrary dictionary of other attributes.
 - *Documentation written by o3, 5/3/25*
 
 # Quick‑Start Guide
@@ -56,6 +62,93 @@ resp = model.multimodal_query(
 )
 print(resp.text)
 ```
+
+### 1.3 Prompting with `Prompt()` helper
+
+Our prompts follow the **named section** based approach presented in *LangChain in Action* §2.  For example, suppose we want to generate a query with the following prompt text:
+```
+Persona: You are an adventurous marine biologist and gifted storyteller.
+Context: You are recording a segment for a children's science podcast about the ocean.
+Instruction: Explain why protecting coral reefs matters.
+Input:
+- Coral reefs support approximately 25% of all marine life
+- They act as natural breakwaters that protect coastlines from storms
+- Rising sea temperatures cause coral bleaching
+- Pollution and overfishing accelerate reef decline
+Tone: inspiring and vivid
+Output Format: one paragraph of no more than 120 words
+```
+
+In `OpenSimLab` you can supply those sections as **any dictionary** — the `Prompt` class simply turns that dict into a YAML block Gemini can read.
+
+```
+from model import Prompt
+
+spec = {
+    "persona": "You are an adventurous marine biologist and gifted storyteller.",
+    "context": "You are recording a segment for a children's science podcast about the ocean.",
+    "instruction": "Explain why protecting coral reefs matters.",
+    "input": [
+        "Coral reefs support approximately 25% of all marine life",
+        "They act as natural breakwaters that protect coastlines from storms",
+        "Rising sea temperatures cause coral bleaching",
+        "Pollution and overfishing accelerate reef decline"
+    ],
+    "tone": "inspiring and vivid",
+    "output_format": "one paragraph of no more than 120 words"
+}
+
+prompt = Prompt(**spec)
+prompt_text = prompt.generate()
+print(prompt_text)      # inspect the YAML‑dump if curious
+
+response = freemodel.generate_content(user_prompt=prompt_text)  # the model will call Prompt for you
+print(response.text)
+```
+
+You can add or remove sections from your prompt simply by adding or removing key/value pairs from the dictionary you use to generate the prompt. 
+
+
+### 1.4 Agent default `generate_*` calls
+
+`SimpleAgent` bakes the same philosophy in three convenience methods:
+
+```
+plan   = alice.generate_plan()      # returns a plan (string)
+action = alice.generate_action()    # may return tool calls 
+                                    # (execute them with `model.apply_tool`)
+speech = alice.generate_speech()    # returns a text string for speech
+```
+
+Each call passes the agent’s **persona, recent memory, and a canned Instruction string** to the model.
+
+### 1.5 One‑off overrides (extra kwargs)
+Need custom context or parameters *without* mutating the agent? Just pass keyword arguments.
+
+
+
+```
+# Temporary situational context & lower randomness, but keep internal state intact
+action = alice.generate_action(
+    context="The lights just went out across the city.",
+    temperature=0.2
+)
+```
+
+Extra keys are merged into the prompt dict **for this call only** – perfect for ephemeral events, UI‑controlled settings, or experiments.
+
+### 1.6 Hacking the Agent Class
+To customize the behavior of agents and simulations, you will need to modify these functions to meet your needs.  
+
+The `agent` class `generate` methods generate prompts from three sources.
+1. Attributes of the individual `agent` class being called.
+    - You can control the exact attributes passed into the call by either
+        - Editing the `agent.description()` definition (affects all `generate` methods)
+        - Customizing how the agent description is handled in the specific `generate` method
+2. Customized instructions based on whether `generate_plan`, `generate_action`, `generate_speech` was called. 
+    - **Expect** that you will need to tweak these specific instructions depending on your model and use case
+3.  Any additional keyward arguments (except `tools` or `model_arguments`, which are handled differently) are also appended into the dictionary used to generate the prompt. 
+
 
 ---
 
@@ -193,7 +286,7 @@ Happy hacking!
 
         The file I want is UNUSUAL.  
         TEXT content should be rendered in markdown
-        CODE should be placed between <CODE> and </CODE> delimiters.
+        CODE should be placed between ``` and ``` delimiters.
 
         NEVER use a triple backtick when outputting your answer 
     ```
