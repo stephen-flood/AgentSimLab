@@ -123,26 +123,31 @@ class World:
       # Populate rooms with *NEW* agents
       for agent_dict in agent_description_list:
         name = agent_dict["name"]
-        persona = agent_dict["persona"]
-        status = agent_dict["status"]
+        # persona = agent_dict["persona"]
+        # status = agent_dict["status"]
+
+        excluded_keys = ["name"]
+        temp_agent_dict = {key:val for key,val in agent_dict.items() if key not in excluded_keys}
+
+        if "memory" not in agent_dict: 
+          temp_agent_dict["memory"] = SimpleMemory()
+        if "model" not in agent_dict:
+          temp_agent_dict["model"] = self.model
+
         if "location" in agent_dict:
           loc_name = agent_dict["location"]
           # print("agent in location", loc_name)
           for location in self.locations:
             if location.name == loc_name:
+              temp_agent_dict["location"] = location
               # print("adding agent to location", loc_name)
-              agent = SimpleAgent(name, 
-                                  traits=persona, 
-                                  status=status, 
-                                  memory=SimpleMemory(), 
-                                  model=self.model,
-                                  location=location)
+              agent = SimpleAgent(name, **temp_agent_dict)
               self.add_agent(agent)
               location.add_person(agent)
               break
         else:
           print(f"Agent {name} has no location")
-          agent = SimpleAgent(name, persona, status, SimpleMemory())
+          agent = SimpleAgent(name, **temp_agent_dict)
           self.add_agent(agent)
     else: ## 
        print("Error: invalid location arguments to World()")

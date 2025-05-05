@@ -1,4 +1,4 @@
-from agent import SimpleAgent, SimpleMemory, show
+from agent import SimpleAgent, SimpleMemory
 from model import GeminiModel
 
 """## Run a (simple) conversation between agents."""

@@ -42,7 +42,7 @@ agents  = [
         "goal":"I need to TELL Timmy to do his homework. I need to find the LOCATION that contains Timmy. I should first CHECK if my CURRENT LOCATION.  If not I should MOVE to a new LOCATION to check if he is there. REMEMBER to alternate looking and moving.",
         "status":"curious",
         # "persona":"focused", # TODO: Get rid of hardcoded 'persona', 'status', etc fields from SimpleAgent methods
-        "persona":"explorer",
+        # "persona":"explorer",
         "location":"office"},
 ]
 world = World(location_names=rooms, room_edges=edges,
@@ -122,7 +122,7 @@ class Simulation:
                 plan = agent.generate_plan(context = "Start by summarizing what you have already done. Look for new arguments for tools you have already", tools=self.tools)
             # plan = agent.generate_plan(tools=self.tools)
             agent.add_memory("Plan: " + plan)
-            # print("Plan: " + plan)
+            print("Plan: " + plan)
 
             act  = agent.generate_action(tools=self.tools)
             if act.function_calls is not None:
