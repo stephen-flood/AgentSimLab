@@ -331,4 +331,9 @@ class Prompt:
     # Repeat the instruction at the end for emphasis
     if "instruction" in self.details:
       prompt += f"\nRemember: the instruction is {self.details['instruction']}"
+
+    # prompt debugging/understanding
+    # print("=======BEGIN_PROMPT=======")
+    # print(prompt)
+    # print("======= END PROMPT =======")
     return prompt

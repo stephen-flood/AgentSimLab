@@ -23,11 +23,13 @@ world = World(location_names=rooms,
 
 # 5️⃣  (Optional) expose world‑mutating functions as Gemini tools
 def move(**kwargs):
-    return kwargs["world"].move(
-        agent=kwargs["agent"],
-        dest_name=kwargs["destination"]
-    )
-
+    try:
+        return kwargs["world"].move(
+            agent=kwargs["agent"],
+            dest_name=kwargs["destination"]
+        )
+    except:
+        return "Invalid move command with arguments {args}.".format(args=kwargs)
 move_tool = llm.register_tool(
     func=move,
     description="Move to an adjacent room",
@@ -35,7 +37,22 @@ move_tool = llm.register_tool(
                                "description":"Name of the room to move to."}}
 )
 
-TOOLS = [move_tool]      # single source‑of‑truth list
+
+def get_room_description(**kwargs) ->str:
+    try:
+        room_desc = kwargs["agent"].get_location().description()
+        print(f"{kwargs["agent"].name} looks around and sees {room_desc}.")
+        return kwargs["agent"].get_location().description()
+    except:
+        err_msg = f"Error: missing argument for get_room_description in {kwargs}"
+        print(err_msg)
+        return err_msg
+look_tool = llm.register_tool(
+    func        = get_room_description,          # pure function from tools.py
+    description = "Look around the current room.",
+    parameters  = {})
+
+TOOLS = [move_tool, look_tool]      # single source‑of‑truth list
 
 # 6️⃣  Write the game loop — *now with explicit state updates*
 class Simulation:

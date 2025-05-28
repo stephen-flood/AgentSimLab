@@ -149,3 +149,6 @@ contents = [
 # types.Part.from_text('What is this image about?'),
 types.Part.from_uri(file_uri='gs://generativeai-downloads/images/scones.jpg', mime_type='image/jpeg') # Call the function with keyword arguments
 ]
+
+import pprint
+pprint.pp(get_all_questions())

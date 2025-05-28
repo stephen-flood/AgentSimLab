@@ -41,7 +41,7 @@ agents  = [
     {"name":"Catherine",
         "goal":"I need to TELL Timmy to do his homework. I need to find the LOCATION that contains Timmy. I should first CHECK if my CURRENT LOCATION.  If not I should MOVE to a new LOCATION to check if he is there. REMEMBER to alternate looking and moving.",
         "status":"curious",
-        # "persona":"focused", # TODO: Get rid of hardcoded 'persona', 'status', etc fields from SimpleAgent methods
+        # "persona":"focused", 
         # "persona":"explorer",
         "location":"office"},
 ]
@@ -98,7 +98,7 @@ speak_tool = model.register_tool(
         }
     }
 )
-TOOLS = [move_tool, describe_tool]              # single source‑of‑truth list
+TOOLS = [move_tool, describe_tool]              
 
 # ---------- 4.  Tiny Simulation with step() ---------------------------------
 class Simulation:
