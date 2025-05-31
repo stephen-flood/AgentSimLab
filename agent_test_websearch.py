@@ -1,10 +1,10 @@
 from agent import SimpleAgent, SimpleMemory, SelfCompressingMemory
 from model import GeminiModel
 
-freemodel = GeminiModel("gemini-2.0-flash-lite", 25, 1000)
+# freemodel = GeminiModel("gemini-2.0-flash-lite", 25, 1000)
 # freemodel= GeminiModel("gemini-2.0-flash", 15, 1000)
 # freemodel= GeminiModel("gemini-2.5-flash-preview-04-17", 10, 1000)
-# freemodel= GeminiModel("gemini-2.5-flash-preview-04-17", 8, 1000)
+freemodel= GeminiModel("gemini-2.5-flash-preview-04-17", 8, 1000)
 
 # agent_mem = SimpleMemory()
 agent_mem = SelfCompressingMemory(100000,freemodel)
@@ -91,6 +91,7 @@ visit_summary_tool = freemodel.register_tool(
 
 
 
+global finished
 finished = False
 answer_string = ""
 def final_answer(answer : str, **kwargs):
@@ -111,7 +112,8 @@ agent.add_memory("My goal is to find the breed of the cat with the softest fur. 
 
 count = 0
 # max_count = 4
-max_count = 10
+# max_count = 10
+max_count = 5
 while not finished and count < max_count:
     count += 1
 
