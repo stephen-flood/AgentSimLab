@@ -131,6 +131,7 @@ class SimpleAgent:
     response = self.generate_content(**prompt_dict)    
 
     return response.text
+    # return self.model._response_text(response)
 
 
   def generate_action(self,**kwargs):
@@ -170,6 +171,7 @@ class SimpleAgent:
 
     response = self.generate_content(**prompt_dict)    
     return response.text
+    # return self.model._response_text(response)
 
   def generate_content(self,**kwargs):
     """

@@ -1,10 +1,11 @@
 from __future__ import annotations
 import yaml # used to format prompts
+import pprint
 
 """llm_models.py
-Refactored, library‑agnostic wrapper classes for interacting with various LLM
-back‑ends **while preserving the original public API**.  Concrete subclasses
-handle provider‑specific details; the shared logic never inspects response
+Refactored, library-agnostic wrapper classes for interacting with various LLM
+back-ends **while preserving the original public API**.  Concrete subclasses
+handle provider-specific details; the shared logic never inspects response
 objects directly.
 
 Public surface
@@ -13,14 +14,13 @@ Public surface
 * ``register_tool`` / ``get_tool``
 * ``apply_tool``
 * ``print_response``
-* Gemini‑specific ``multimodal_query`` retained
 
 Internal abstraction points
 ---------------------------
-* ``_generate``            – provider API call
-* ``_create_tool_object``  – translate tool metadata
-* ``_iter_tool_calls``     – yield ``(name, args, raw)`` triples
-* ``_response_text``       – extract printable text
+* ``_generate``            - provider API call
+* ``_create_tool_object``  - translate tool metadata
+* ``_iter_tool_calls``     - yield ``(name, args, raw)`` triples
+* ``_response_text``       - extract printable text
 """
 
 from abc import ABC, abstractmethod
@@ -34,7 +34,7 @@ __all__ = [
     "RateLimitTracker",
     "SimpleModel",
     "GeminiModel",
-    "OpenApiModel",
+    # "OpenApiModel",
 ]
 
 ###############################################################################
@@ -52,7 +52,7 @@ except:
 ###############################################################################
 
 class RateLimitTracker:
-    """Throttle helper for free‑tier endpoints."""
+    """Throttle helper for free-tier endpoints."""
 
     def __init__(self, per_min_limit: int):
         self.per_min_limit = per_min_limit
@@ -67,6 +67,8 @@ class RateLimitTracker:
         print(self._history)
 
     def time_to_wait(self) -> float:
+        if self.per_min_limit < 0:
+            return 0
         average_wait = 60 / self.per_min_limit
         n = len(self._history)
         # Spend the first quarter of the budget immediately
@@ -83,13 +85,13 @@ class RateLimitTracker:
 ###############################################################################
 
 class SimpleModel(ABC):
-    """Provider‑agnostic wrapper exposing the legacy API."""
+    """Provider-agnostic wrapper exposing the legacy API."""
 
     def __init__(
         self,
         model_name: str,
-        per_min_limit: int ,
-        per_day_limit: int ,
+        per_min_limit: int = -1,
+        per_day_limit: int = -1,
     ) -> None:
         self.model_name = model_name
         self._rate = RateLimitTracker(per_min_limit)
@@ -106,7 +108,13 @@ class SimpleModel(ABC):
         if wait:
             time.sleep(wait)
         # Call subclass's version of llm query
-        return self._generate(**kwargs)
+        try:
+            content = self._generate(**kwargs)
+        except Exception as e:
+            print("Error generating content:" , e)
+            pprint.pp(kwargs)
+            content = None
+        return content
 
     generate = generate_content  # ergonomic alias
 
@@ -147,8 +155,13 @@ class SimpleModel(ABC):
             # Pass both the LLM supplied arguments AND the user defined **kwargs 
             merged = {**args, **kwargs}
             if name in self._tool_registry:
-                out = self._tool_registry[name]["function"](**merged)
-                results.append((out, raw))
+                try:    
+                    out = self._tool_registry[name]["function"](**merged)
+                    results.append((out, raw))
+                except:
+                    # raise ValueError(f"Error applying tool {name}", raw)
+                    print(f"=========\n ERROR applying tool {name}.\n=========")
+                    results.append((f"Error applying tool {name}. DOUBLE CHECK that your variables match the tool schema.", raw))
             else:
                 results.append((f"Tool {name} not registered", raw))
         return results
@@ -201,7 +214,7 @@ from google import genai
 from google.genai import types as gtypes
 
 class GeminiModel(SimpleModel):
-    """Wrapper for *google‑genai*."""
+    """Wrapper for *google-genai*."""
 
     def __init__(
         self,
@@ -212,7 +225,7 @@ class GeminiModel(SimpleModel):
     ) -> None:
         super().__init__(model_name, per_min_limit, per_day_limit)
         # if genai is None:
-        #     raise ImportError("google-genai not installed – `pip install google-genai`.")
+        #     raise ImportError("google-genai not installed - `pip install google-genai`.")
         # api_key = client_kw.pop("api_key", None) or os.getenv("GEMINI_API_KEY")
         # self._client = genai.Client(api_key=api_key, **client_kw)
         self.API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -229,24 +242,76 @@ class GeminiModel(SimpleModel):
     def _generate(
         self,
         *,
-        contents: List[ gtypes.Content] | None = None,
+        # ── OLD parameters ───────────────────────────────────────────
         user_prompt: str | None = None,
-        tools: List[Any] | None = None,
+        contents: List[gtypes.Content] | None = None,
+        tools:    List[Any]           | None = None,
+        # ── NEW multimodal hooks ─────────────────────────────────────
+        attachment_names: List[str]   | None = None,
+        system_prompt:    str         | None = None,
         **_,
-    ) -> gtypes.GenerateContentResponse:  # type: ignore
+    ) -> gtypes.GenerateContentResponse:          # type: ignore
+        """
+        Unified text + multimodal generation helper.
+
+        You can call `generate_content` in *either* of two styles:
+
+        • Plain-text:
+            model.generate_content(user_prompt="Hello world")
+
+        • Multimodal:
+            model.generate_content(
+                user_prompt      ="Describe the picture",
+                attachment_names =["/path/dog.png", "https://…/cat.jpg"],
+                system_prompt    ="You are a helpful image analyst"
+            )
+        """
+        # ------------------------------------------------------------------
+        # If the caller handed us a ready-made `contents` list, respect it.
+        # Otherwise build one from the convenience kwargs.
+        # ------------------------------------------------------------------
         if contents is None:
+            contents_list: List[gtypes.Content | gtypes.Part] = []
+            attachment_names = attachment_names or []
+
+            # 1. binary/file/media parts
+            for ref in attachment_names:
+                contents_list.append(self._part_from_ref(ref))
+
+            # 2. optional system instruction
+            if system_prompt:
+                contents_list.append(
+                    gtypes.Content(
+                        role="system",
+                        parts=[gtypes.Part.from_text(text=system_prompt)],
+                    )
+                )
+
+            # 3. primary user prompt (required in this code-path)
             if user_prompt is None:
-                raise ValueError("GeminiModel.generate_content requires `user_prompt` or `contents`.")
-            contents = [
-                gtypes.Content(role="user", parts=[gtypes.Part.from_text(text = user_prompt)])
-            ]
-        cfg = gtypes.GenerateContentConfig(tools=tools, response_mime_type="text/plain")
+                raise ValueError(
+                    "GeminiModel.generate_content needs `user_prompt` "
+                    "when `contents` is omitted."
+                )
+            contents_list.append(
+                gtypes.Content(
+                    role="user",
+                    parts=[gtypes.Part.from_text(text=user_prompt)],
+                )
+            )
+            contents = contents_list   # now fully assembled
+
+        # ------------------------------------------------------------------
+        cfg = gtypes.GenerateContentConfig(
+            tools=tools,
+            response_mime_type="text/plain",
+        )
         return self._client.models.generate_content(
             model=self.model_name,
             contents=contents,
             config=cfg,
         )
-
+    
     def _create_tool_object(self, name: str, description: str, parameters: dict) -> gtypes.Tool:  # type: ignore
         return gtypes.Tool(
             function_declarations=[
@@ -269,23 +334,6 @@ class GeminiModel(SimpleModel):
     def _response_text(self, response):
         return getattr(response, "text", "")
 
-    # Legacy helper retained -------------------------------------------
-    def multimodal_query(
-        self,
-        *,
-        user_prompt: str,
-        attachment_names: List[str] | None = None,
-        system_prompt: str | None = None,
-    ):
-        if gtypes is None:
-            raise ImportError("google‑genai types unavailable.")
-        attachment_names = attachment_names or []
-        parts: List[Any] = [self._part_from_ref(r) for r in attachment_names]
-        if system_prompt:
-            parts.append(gtypes.Content(role="system", parts=[gtypes.Part.from_text(text=system_prompt)]))
-        parts.append(user_prompt)
-        return self.generate_content(contents=parts)
-
     @staticmethod
     def _part_from_ref(ref: str):
         from urllib.parse import urlparse
@@ -301,81 +349,214 @@ class GeminiModel(SimpleModel):
             return gtypes.Part.from_bytes(data=fh.read(), mime_type=mime)
 
 ###############################################################################
-# OpenAI ChatCompletion
+# HTTP based access 
 ###############################################################################
+import json, requests
+from typing import Any, Dict, List, Iterator, Tuple, Union
 
-import openai
+Message = Dict[str, Union[str, list, dict]]            # helper alias
 
-class OpenApiModel(SimpleModel):
-    """Wrapper for *openai* ChatCompletion / GPT‑4o."""
+class HTTPChatModel(SimpleModel):
+    """
+    Generic client for any OpenAI-compatible HTTP server (vLLM, Ollama, LocalAI …).
+    Always sends tool specs under the **tools** key, wrapped with {"type": "function"}.
+    """
 
     def __init__(
         self,
-        model_name: str = "gpt-4o-mini",
-        per_min_limit: int = 60,
-        api_key: str | None = None,
-        **client_kw: Any,
+        model_name: str,
+        base_url: str                    = "http://localhost:11434/v1",
+        api_key:   str | None            = None,
+        **opts: Any,
     ) -> None:
-        super().__init__(model_name, per_min_limit)
-        if openai is None:
-            raise ImportError("openai not installed – `pip install openai`.")
-        openai.api_key = api_key or os.getenv("OPENAI_API_KEY")
-        self._client_kw = client_kw
+        super().__init__(model_name, **opts)
+        self.base_url    = base_url.rstrip("/")
+        self.api_key     = api_key or ""
+        self._functions: List[Dict[str, Any]] = []      # raw function specs
 
-    # Provider hooks ----------------------------------------------------
+        self.session     = requests.Session()
+        self.session.headers.update({"Content-Type": "application/json"})
+        if self.api_key:
+            self.session.headers.update({"Authorization": f"Bearer {self.api_key}"})
+
+    # ------------------------------------------------------------------
+    # Same signature as SimpleModel / GeminiModel
+    # ------------------------------------------------------------------
+    def _create_tool_object(
+        self,
+        name: str,
+        description: str,
+        parameters: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Build an OpenAI-style function spec.  Stored in self._functions and later
+        wrapped into the `tools` field at call-time.
+        """
+        # spec = {
+        #     "name": name, 
+        #     "description": description, 
+        #     "parameters": parameters,
+        #     "required" : list(parameters.keys())
+        # }
+        spec: Dict[str, Any] = {
+            "name":        name,
+            "description": description,
+            "parameters": {
+                "type":       "object",
+                "properties": parameters,
+                "required" : list(parameters.keys()),
+            },
+        }
+        self._functions.append(spec)
+        return spec
+
+    # ------------------------------------------------------------------
+    # Generation
+    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Unified text + multimodal generation (Gemini-compatible signature)
+    # ------------------------------------------------------------------
     def _generate(
         self,
         *,
-        messages: List[Dict[str, str]] | None = None,
-        user_prompt: str | None = None,
-        tools: List[Dict[str, Any]] | None = None,
-        **kwargs,
-    ):
+        # ① legacy chat/completion entry-point --------------------------
+        messages: List[Message] | None = None,
+        # ② convenience keywords ---------------------------------------
+        user_prompt:     str | None            = None,
+        attachment_names: List[str] | None     = None,
+        system_prompt:    str | None           = None,
+        # ---------------------------------------------------------------
+        stream: bool = False,
+        **params: Any,
+    ) -> Union[Dict[str, Any], Iterator[str]]:
+
+        # -------- assemble messages list if caller used shortcuts -----
         if messages is None:
             if user_prompt is None:
-                raise ValueError("OpenApiModel.generate_content requires `user_prompt` or `messages`.")
-            messages = [{"role": "user", "content": user_prompt}]
-        return openai.ChatCompletion.create(
-            model=self.model_name,
-            messages=messages,
-            tools=tools,
-            **self._client_kw,
-            **kwargs,
+                raise ValueError(
+                    "HTTPChatModel.generate_content needs `user_prompt` "
+                    "when `messages` is omitted."
+                )
+
+            msg_parts: List[dict] = []
+
+            ## Attachments not implemented in Ollama, etc
+            # if attachment_names:
+            #     raise NotImplementedError(
+            #     print(
+            #         "This HTTP endpoint does not accept image parts. "
+            #         "Remove `attachment_names` or use a multimodal-capable server."
+            #     )            # encode attachments (URLs are fine; local files → base64 URI)
+            # attachment_names = attachment_names or []
+            # for ref in attachment_names:
+            #     msg_parts.append(self._part_from_ref(ref))
+
+            # user text
+            msg_parts.append({"type": "text", "text": user_prompt})
+
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+
+            # OpenAI multimodal messages use list-of-parts as `content`
+            messages.append({"role": "user", "content": msg_parts})
+
+        payload: Dict[str, Any] = {
+            "model":    self.model_name,
+            "messages": messages,
+            "stream":   stream,
+            **params,
+        }
+        if self._functions:
+            payload["tools"] = [
+                {"type": "function", "function": spec} for spec in self._functions
+            ]
+
+        url  = f"{self.base_url}/chat/completions"
+        resp = self.session.post(url, json=payload, stream=stream)
+        resp.raise_for_status()
+
+        if not stream:
+            return resp.json()
+
+        def _sse_text() -> Iterator[str]:
+            for raw in resp.iter_lines(decode_unicode=True):
+                if not raw or not raw.startswith("data:"):
+                    continue
+                data = raw[5:].strip()
+                if data == "[DONE]":
+                    break
+                chunk = json.loads(data)
+                delta = chunk["choices"][0].get("delta", {})
+                if delta.get("content") is not None:
+                    yield delta["content"]
+        return _sse_text()
+
+    # ------------------------------------------------------------------
+    # helper: turn a file-path or URL into an OpenAI image part
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _part_from_ref(ref: str) -> dict:
+        """
+        Returns a dict in the format expected by OpenAI-style multimodal APIs:
+          {"type": "image_url", "image_url": {"url": "<...>"}}
+        Local files are read & base64-encoded into a data-URI.
+        """
+        from urllib.parse import urlparse
+        import base64, mimetypes, requests, pathlib
+
+        # URL? just pass through
+        if urlparse(ref).scheme in ("http", "https"):
+            return {"type": "image_url", "image_url": {"url": ref}}
+
+        # otherwise treat as local file path
+        path = pathlib.Path(ref).expanduser()
+        mime, _ = mimetypes.guess_type(path)
+        with path.open("rb") as f:
+            b64 = base64.b64encode(f.read()).decode()
+        data_uri = f"data:{mime or 'application/octet-stream'};base64,{b64}"
+        return {"type": "image_url", "image_url": {"url": data_uri}}
+
+
+    # ------------------------------------------------------------------
+    # Tool-call extraction (handles both `function_call` and `tool_calls`)
+    # ------------------------------------------------------------------
+    def _iter_tool_calls(
+        self, response: Dict[str, Any]
+    ) -> List[Tuple[str, Dict[str, Any], Any]]:
+        calls: List[Tuple[str, Dict[str, Any], Any]] = []
+        msg = response.get("choices", [{}])[0].get("message", {})
+
+        # # Legacy OpenAI style (some servers still emit this)
+        # if (fc := msg.get("function_call")):
+        #     args = self._parse_args(fc.get("arguments", {}))
+        #     calls.append((fc["name"], args, fc))
+
+        # New style: array of tool_calls
+        for tc in msg.get("tool_calls", []):
+            fn  = tc.get("function", {})
+            name, args_raw = fn.get("name"), fn.get("arguments", {})
+            if name:
+                calls.append((name, self._parse_args(args_raw), tc))
+
+        return calls
+
+    @staticmethod
+    def _parse_args(args_raw: Any) -> Dict[str, Any]:
+        if isinstance(args_raw, str):
+            try:   return json.loads(args_raw)
+            except json.JSONDecodeError: return {}
+        return args_raw if isinstance(args_raw, dict) else {}
+
+    # ------------------------------------------------------------------
+    def _response_text(self, response: Dict[str, Any]) -> str:
+        return (
+            response.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "")
+            or ""
         )
 
-    def _create_tool_object(self, name: str, description: str, parameters: dict) -> dict:
-        return {
-            "type": "function",
-            "function": {
-                "name": name,
-                "description": description,
-                "parameters": {
-                    "type": "object",
-                    "properties": parameters,
-                    "required": list(parameters.keys()),
-                },
-            },
-        }
-
-    def _iter_tool_calls(self, response):
-        tool_calls: List[Tuple[str, Dict[str, Any], Any]] = []
-        for choice in getattr(response, "choices", []):
-            msg = choice.message
-            for tc in getattr(msg, "tool_calls", []):
-                # tc.function.arguments is a JSON string in the new SDK
-                args_str = tc.function.arguments
-                try:
-                    args_dict = json.loads(args_str) if isinstance(args_str, str) else args_str
-                except Exception:
-                    args_dict = {}
-                tool_calls.append((tc.function.name, args_dict, tc))
-        return tool_calls
-
-    def _response_text(self, response):
-        choices = getattr(response, "choices", [])
-        if choices:
-            return choices[0].message.content or ""
-        return ""
 
 ###############################################################################
 # Prompt Class (handwritten)

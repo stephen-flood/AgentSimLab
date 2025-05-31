@@ -1,10 +1,13 @@
 from agent import SimpleAgent, SimpleMemory, SelfCompressingMemory
 from model import GeminiModel
+from modelrefactor import HTTPChatModel
 
 # freemodel = GeminiModel("gemini-2.0-flash-lite", 25, 1000)
 # freemodel= GeminiModel("gemini-2.0-flash", 15, 1000)
 # freemodel= GeminiModel("gemini-2.5-flash-preview-04-17", 10, 1000)
-freemodel= GeminiModel("gemini-2.5-flash-preview-04-17", 8, 1000)
+# freemodel= GeminiModel("gemini-2.5-flash-preview-04-17", 8, 1000)
+
+freemodel = HTTPChatModel("mistral-small:24b-instruct-2501-q4_K_M")
 
 # agent_mem = SimpleMemory()
 agent_mem = SelfCompressingMemory(100000,freemodel)
@@ -40,7 +43,8 @@ import requests
 def visit_url( url : str , **kwargs ):
     try:
         response = requests.get(url, timeout=10)
-        return response.text
+        # return response.text
+        return freemodel._response_text(response)
     except:
         return f"Error getting {url}"
 visit_tool = freemodel.register_tool(
@@ -58,7 +62,8 @@ def get_url_summary( url : str , **kwargs ):
     # try:
     # Visit website and get its full contents
     response = requests.get(url, timeout=10)
-    response_text = response.text
+    # response_text = response.text
+    response_text = freemodel._response_text(response)
     # print("######### RESPONSE:\n",response_text)
     
     # Extract information about the agent performing the search
@@ -91,11 +96,11 @@ visit_summary_tool = freemodel.register_tool(
 
 
 
-global finished
-finished = False
+global keep_going 
+keep_going  = True
 answer_string = ""
 def final_answer(answer : str, **kwargs):
-    finished = True
+    keep_going = False
     answer_string = answer
     print("Final answer:\n", answer_string)
 final_answer_tool = freemodel.register_tool(
@@ -112,9 +117,9 @@ agent.add_memory("My goal is to find the breed of the cat with the softest fur. 
 
 count = 0
 # max_count = 4
-# max_count = 10
-max_count = 5
-while not finished and count < max_count:
+max_count = 20
+# max_count = 5
+while keep_going and (count < max_count):
     count += 1
 
     print(f"########### Cycle {count} of {max_count} ###########")
