@@ -453,40 +453,43 @@ class HTTPChatModel(SimpleModel):
 
         
         # Handle tools if present
-        if self.native_tool and len(self._tool_registry)>0: 
-            # Pass tools in payload (through API)
-            if self._tools:
-                payload["tools"] = [
-                    {"type": "function", "function": spec} for spec in self._tools
-                ]
-        elif len(self._tool_registry)>0: 
-            # Embed tool instructions in system prompt
-            # 1. Build tool description block
-            tool_persona = "You have access to the following tools."
-            tools_block = yaml.dump(self._tools)
-            # tools_block = []
-            # for spec in self._tools:
-                # tools_block.append(
-                #     f"- {spec['name']} :: {spec['description']}  "
-                #     f"params = {json.dumps(spec['parameters']['properties'])}"
-                # )
-            guard = (
-                "You may call **one** function. "
-                "If you do, respond with *only* this JSON:\n"
-                '{ "function": <func_name>, "arguments": {<arg_name_1>:<arg_val_1>, <arg_name_2>:<arg_val_2>,...}}'
-            )
-            # tool_prompt = tool_persona + "\nTOOLS:\n" + "\n".join(tools_block) + "\n" + guard
-            tool_prompt  = f"{tool_persona}\nTOOLS:\n{tools_block}\n{guard}"
-            if messages:
-                print("Warning: tool instruction not added to pre-existing messages")
+        if "tools" in params:
+            tools_provided = params["tools"]
 
-            if system_prompt:
-                system_prompt += tool_prompt
-            else:
-                system_prompt = tool_prompt
-            # payload["messages"] = {"role": "system", "content": }
+            if self.native_tool and len(self._tool_registry)>0: 
+                # Pass tools in payload (through API)
+                # if self._tools:
+                    payload["tools"] = [
+                        # {"type": "function", "function": spec} for spec in self._tools
+                        {"type": "function", "function": spec} for spec in tools_provided
+                    ]
+            elif len(self._tool_registry)>0: 
+                # Embed tool instructions in system prompt
+                # 1. Build tool description block
+                tool_persona = "You have access to the following tools."
+                tools_block = yaml.dump(tools_provided)
+                # tools_block = []
+                # for spec in self._tools:
+                    # tools_block.append(
+                    #     f"- {spec['name']} :: {spec['description']}  "
+                    #     f"params = {json.dumps(spec['parameters']['properties'])}"
+                    # )
+                guard = (
+                    "You may call **one** function. "
+                    "If you do, respond with *only* this JSON:\n"
+                    '{ "function": <func_name>, "arguments": {<arg_name_1>:<arg_val_1>, <arg_name_2>:<arg_val_2>,...}}'
+                )
+                tool_prompt  = f"{tool_persona}\nTOOLS:\n{tools_block}\n{guard}"
+                if messages:
+                    print("Warning: tool instruction not added to pre-existing messages")
 
-            if self.verbose: print(system_prompt)
+                if system_prompt:
+                    system_prompt += tool_prompt
+                else:
+                    system_prompt = tool_prompt
+                # payload["messages"] = {"role": "system", "content": }
+
+                if self.verbose: print(system_prompt)
 
         # -------- assemble messages list if caller used shortcuts -----
         if messages is None:

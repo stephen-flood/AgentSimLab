@@ -1,5 +1,5 @@
 # main.py
-from model  import GeminiModel
+from model  import GeminiModel, HTTPChatModel
 from world  import World
 from agent  import SimpleAgent
 
@@ -15,8 +15,10 @@ from agent  import SimpleAgent
 
 # ---------- 1.  Create model instance ---------------------------------------
 # model = GeminiModel("gemini-2.0-flash-lite", 25, 1000)
-model = GeminiModel("gemini-2.0-flash", 15, 1000)
+# model = GeminiModel("gemini-2.0-flash", 15, 1000)
 # model = GeminiModel("gemini-2.5-flash-preview-04-17", 10, 1000)
+model = HTTPChatModel("mistral-small:24b-instruct-2501-q4_K_M")
+# model = HTTPChatModel("gemma3:12b", native_tool=False)
 
 # ---------- 2.  Build the world ---------------------------------------------
 rooms   = ["living", "kitchen", "bathroom", "bedroom", "office", "garden"]
@@ -125,9 +127,10 @@ class Simulation:
             print("Plan: " + plan)
 
             act  = agent.generate_action(tools=self.tools)
-            if act.function_calls is not None:
-                for call in act.function_calls:
-                    intended_action = f"Calling {call.name} with arguments {call.args}"
+            tool_call_list = model._iter_tool_calls(act)
+            if tool_call_list is not None:
+                for call in tool_call_list:
+                    intended_action = f"Calling {call[0]} with arguments {call[1]}"
                     agent.add_memory("Attempting Action: " + intended_action)
                     print("Attempting Action: " + intended_action)
             else: 

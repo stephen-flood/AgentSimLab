@@ -18,9 +18,12 @@ mem_support  = SimpleMemory()
 print(str(mem_support))
 
 # freemodel = GeminiModel("gemini-2.0-flash-lite", 30, 1000)
+# freemodel = GeminiModel("gemini-2.5-flash-preview-04-17", 10, 1000)
 # freemodel = HTTPChatModel("mistral-small:24b-instruct-2501-q4_K_M")
-freemodel = HTTPChatModel("gemma3:12b", native_tool=False)
-
+freemodel = HTTPChatModel("gemma3:12b", 
+                          native_tool=False, 
+                          verbose=True,
+                          )
 
 cust = SimpleAgent("Customer",
                    persona = "impatient, tech-savvy",
@@ -35,81 +38,76 @@ sup  = SimpleAgent("SupportAgent",
                    memory = mem_support,
                    model = freemodel)
 
+## TOOLS 
 def refund_purchase():
+    sup.add_memory("I have refunded the customer's purchase.")
+    cust.add_memory("My purchase has been refunded by support.")
+    purchase_refunded = True
     print("Purchase refunded")
-    exit
 refund = freemodel.register_tool(refund_purchase,"The agent refunds the customer's purchase price.",{})    
+
+keep_going = True
 def accept_resolution():
+    global keep_going
+    keep_going = False
     print("Resolution accepted")
-    exit
 accept = freemodel.register_tool(accept_resolution,"The customer accepts the resolution.  Either the problem is fixed, or they have recieved a refund.",{})
+
 import random
 def check_phone():
     phone_status = random.choices(["Phone is now working","Phone is still broken"],[0.5,0.5])
     return phone_status
 check = freemodel.register_tool(check_phone,"The customer checks the phone to see if it is working.  Outputs True or False",{})
 
+## Start the conversation
 observation = 'Customer says: "My jPhone-72 phone keeps rebooting!"'
 mem_customer.add_memory(observation)
 mem_support.add_memory(observation)
 print(observation,"\n")
-# for _ in range(3) :
-for _ in range(30) :
-    # cont, sup_line = sup.respond(observation)
-    # sup_line = sup.generate_speech(observation = observation )
-    # sup_line = sup.generate_content(observation = observation , 
-    #                                 # format = "Output a single sentence or paragraph."
-    #                                 )
+for _ in range(3) :
+# for _ in range(30) :
+    if not keep_going: 
+        print("Conversation complete.")
+        break
+
+    # Support Speaks
     sup_line = sup.generate_speech(observation = observation , 
                                     # format = "Output a single sentence or paragraph."
                                     )
-    # sup_line = sup_line.text
+    sup_line = freemodel._response_text(sup_line)
     observation = "Support says: " + sup_line
     mem_customer.add_memory(observation)
     mem_support.add_memory(observation)
     print(observation,"\n")
-    sup_action = sup.generate_action(model_parameters={"tools":[refund]})
+
+    # Support Acts
+    sup_action = sup.generate_action(model_parameters={"tools":[refund]},
+                                     details="Respond 'No action taken' if you do not want to use any tool at this step.")
     sup_action = freemodel.apply_tool(sup_action)
     for action in sup_action:
         description = "Support action: " + str(action)
         mem_customer.add_memory(description)
         mem_support.add_memory( description)
-    print(sup_action)
-    # result = "Support acts: " + sup_action
-    # mem_customer.add_memory(result)
-    # mem_support.add_memory(result)
-    # print(result,"\n")
-    # print(sup_line)
-    # show("Support", sup_line)
-    # print("")
-    ## Don't trust the customer servie agent to end the conversation!
-    # if not cont: break
-    # cont, cust_line = cust.respond(sup_line)
-    # cust_line = cust.generate_speech(observation = sup_line)
-    # cust_line = cust.generate_content(observation = sup_line , 
-    #                                 # format = "Output a single sentence or paragraph."
-    #                                 )
+        print(description)
+
+    # Customer Speaks
     cust_line = cust.generate_speech(observation = sup_line , 
                                     # format = "Output a single sentence or paragraph."
                                     )
-    # cust_line = cust_line.text
+    print(cust_line)
+    cust_line = freemodel._response_text(cust_line)
     observation = "Customer says: " + cust_line
     mem_customer.add_memory(observation)
     mem_support.add_memory(observation)
     print(observation,"\n")
+
+    # Customer Acts
     cust_action = cust.generate_action(model_parameters={"tools":[accept,check]})
     cust_action = freemodel.apply_tool(cust_action)
-    print(cust_action)
     for action in cust_action:
         description = "Customer action:" + str(action)
         mem_customer.add_memory( description )
         mem_support.add_memory(  description )
-    print(cust_action)
+        print(description)
 
-    # result = "Customer acts: " + cust_action
-    # mem_customer.add_memory(result)
-    # mem_support.add_memory(result)
-    # print(result,"\n")
-    # show("Customer", cust_line)
-    # if not cont: break
     observation = cust_line
