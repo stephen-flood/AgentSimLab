@@ -61,7 +61,7 @@ def visit_url( url : str , **kwargs ):
             time.sleep(wait)
         response = requests.get(url, timeout=10)
         # return response.text
-        return freemodel._response_text(response)
+        return freemodel.response_text(response)
     except:
         return f"Error getting {url}"
 visit_tool = freemodel.register_tool(
@@ -80,7 +80,7 @@ def get_url_summary( url : str , **kwargs ):
         # Visit website and get its full contents
         response = requests.get(url, timeout=10)
         # response_text = response.text
-        response_text = freemodel._response_text(response)
+        response_text = freemodel.response_text(response)
         # print("######### RESPONSE:\n",response_text)
         
         # Extract information about the agent performing the search
@@ -98,7 +98,7 @@ def get_url_summary( url : str , **kwargs ):
             website = response_text,
             memory = memory_str,
         )
-        summary_text = freemodel._response_text(summary)
+        summary_text = freemodel.response_text(summary)
         print("######### SUMMARY:\n",summary_text)
         return summary_text
     except:
@@ -170,7 +170,7 @@ while keep_going and (count < max_count):
     #         intended_action = f"Calling {call.name} with arguments {call.args}"
     #         agent.add_memory("Attempting Action: " + intended_action)
     else:
-        print(freemodel._response_text(act))
+        print(freemodel.response_text(act))
 
     # (4) Use model.apply_tool.  Remember to supply all "hidden" arguments, not advertised to the model
     observe = freemodel.apply_tool(act, agent=agent)

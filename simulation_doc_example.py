@@ -1,13 +1,13 @@
 from model  import GeminiModel, HTTPChatModel
 from world  import World
-from agent  import SimpleAgent
+from agent  import SimpleAgent, SimpleModel, SelfCompressingMemory
 
 # 1️⃣  Create the shared language model
 # llm = GeminiModel("gemini-2.0-flash-lite", 25, 1000)
 # llm = GeminiModel("gemini-2.0-flash", 15, 1000)
 # llm = GeminiModel("gemini-2.5-flash-preview-04-17", 10, 1000)
-llm = HTTPChatModel("mistral-small:24b-instruct-2501-q4_K_M")
-# llm = HTTPChatModel("gemma3:12b", native_tool=False)
+# llm = HTTPChatModel("mistral-small:24b-instruct-2501-q4_K_M")
+llm = HTTPChatModel("gemma3:12b", native_tool=False)
 
 # 2️⃣  Describe the physical space
 rooms = ["kitchen", "living", "garden"]
@@ -15,8 +15,22 @@ edges = [("kitchen","living"), ("living","garden")]
 
 # 3️⃣  Describe the inhabitants
 agents = [
-    {"name":"Alice", "persona":"curious", "status":"reading", "location":"kitchen"},
-    {"name":"Bob"  , "persona":"sleepy" , "status":"napping", "location":"living"},
+    {"name":"Alice", 
+        "persona":"curious", 
+        "status":"reading", 
+        "location":"kitchen",
+        # "memory" :  SimpleMemory(),
+        # "memory" :  SelfCompressingMemory(500,llm), # Memory limited to given number of CHARACTERS
+        "memory" :  SelfCompressingMemory(1000,llm), # Memory limited to given number of CHARACTERS
+    },
+    {"name":"Bob"  , 
+        "persona":"sleepy" , 
+        "status":"napping", 
+        "location":"living",
+        # "memory" :  SimpleMemory(),
+        # "memory" :  SelfCompressingMemory(500,llm),# Memory limited to given number of CHARACTERS
+        "memory" :  SelfCompressingMemory(1000,llm), # Memory limited to given number of CHARACTERS
+    },
 ]
 
 # 4️⃣  Build the world object
@@ -78,7 +92,7 @@ class Simulation:
             action = ag.generate_action(tools=self.tools, plan=plan)
 
             # ➌ Observe: execute any tool calls and store what happened
-            # OPTIONAL: Describe tools you plan to call
+            # OPTIONAL: Describe and remember the tools you plan to call
             tool_call_list = llm._iter_tool_calls(action)
             if tool_call_list is not None:
                 for call in tool_call_list:
@@ -91,8 +105,8 @@ class Simulation:
             # ACTUALLY call the tools
             observe = llm.apply_tool(action, world=self.world, agent=ag)
             for result in observe:
-                ag.add_memory("Observation: " + str(result[0]))
-                print("Observation: " + str(result[0]))
+                ag.add_memory("Observation:\n" + str(result[0]))
+                # print("Observation:\n" + str(result[0]))
 
         self.t += 1
 
@@ -100,5 +114,7 @@ class Simulation:
         for _ in range(steps):
             self.step()
 
-Simulation(world, TOOLS).run(steps=3)
+# Simulation(world, TOOLS).run(steps=3)
+Simulation(world, TOOLS).run(steps=30)
+
 world.print()

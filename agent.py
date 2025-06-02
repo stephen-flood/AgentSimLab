@@ -44,12 +44,19 @@ class SelfCompressingMemory():
     self.max_chars = max_chars
     self.model = model
 
+    self.verbose = False
+
     if memories is None:
       memories = []
     self.memories: List[str] = memories
 
+    self.length = 0
+    for memory in self.memories:
+      self.length += len(memory)
+
   def add_memory(self, text:str ):
     self.memories.append(text)
+    self.length += len(text)
 
     # check if memory exceeds maximum size
     memory_yaml = str(self)
@@ -59,13 +66,25 @@ class SelfCompressingMemory():
         max_chars = self.max_chars,
         # instruction = "Write a List of the most relevant information from your MEMORY in YAML format.  Use your MEMORY for detailed information about your task.",
         instruction = "Write down the most relevant information from your MEMORY in YAML format.  Use your MEMORY for detailed information about your task.",
-        memory = memory_yaml,
+        memories = memory_yaml,
       ).generate()
-      compressed_memory = self.model.generate_content(user_prompt=prompt)
-      self.memory = yaml.safe_load(compressed_memory)
+      compressed_memory_response = self.model.generate_content(user_prompt=prompt)
+      compressed_memory = self.model.response_text(compressed_memory_response)
 
-      if len(str(self.memory) > self.max_chars):
+      self.length = len(compressed_memory)
+
+      try:
+        self.memories = yaml.safe_load(compressed_memory)
+      except:
+        self.memories = [compressed_memory]
+
+      if self.length > self.max_chars:
         print("ERROR: memory compression FAILED")
+        if not self.verbose: print(compressed_memory) 
+
+      if self.verbose:
+        print("Compressing memories")
+        print(compressed_memory)
 
   def __str__(self):
     if len(self.memories) == 0 :
@@ -133,7 +152,7 @@ class SimpleAgent:
 
     response = self.generate_content(**prompt_dict)    
 
-    return self.model._response_text(response)
+    return self.model.response_text(response)
 
 
   def generate_action(self,**kwargs):
@@ -172,7 +191,7 @@ class SimpleAgent:
     #   prompt_dict["current location"] = self.attribute_dictionary["location"].name
 
     response = self.generate_content(**prompt_dict)    
-    return self.model._response_text(response)
+    return self.model.response_text(response)
 
   def generate_content(self,**kwargs):
     """

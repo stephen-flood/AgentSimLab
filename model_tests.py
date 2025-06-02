@@ -16,8 +16,8 @@ freemodel = HTTPChatModel("gemma3:12b", multimodal=True, native_tool=False, verb
 
 """## Model Wrapper: Example Usage"""
 
-test_prompt = False
-test_tools = False
+test_prompt = True
+test_tools = True
 test_multimodal = True
 
 if test_prompt:
@@ -34,7 +34,7 @@ if test_prompt:
   prompt_text = sample_prompt.generate()
   print("Prompt Text", prompt_text)
   response = freemodel.generate_content(user_prompt=prompt_text)
-  pprint.pp(freemodel._response_text(response))
+  pprint.pp(freemodel.response_text(response))
 
 
 
@@ -63,7 +63,7 @@ if test_prompt:
 
   response = freemodel.generate_content(user_prompt=prompt_text)  # the model will call Prompt for you
   # print(response.text)
-  pprint.pp(freemodel._response_text(response))
+  pprint.pp(freemodel.response_text(response))
 
 
   # Prompt generation script test
@@ -119,12 +119,12 @@ if test_multimodal:
       user_prompt="Describe the image in one sentence.",
       attachment_names=[str(img_path)],
   )
-  print(freemodel._response_text(response))
+  print(freemodel.response_text(response))
 
   # Hosted Image
   response=freemodel.generate_content( user_prompt = "What is the color of this flower?", attachment_names = ["https://hips.hearstapps.com/hmg-prod/images/wisteria-in-bloom-royalty-free-image-1653423554.jpg"])
-  print(freemodel._response_text(response))
+  print(freemodel.response_text(response))
   # Online Video
   response=freemodel.generate_content( user_prompt = "What is the second joint in this video?", attachment_names =["https://www.youtube.com/watch?v=2bS_N6_QQos"])
-  print(freemodel._response_text(response))
+  print(freemodel.response_text(response))
 

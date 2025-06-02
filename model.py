@@ -20,7 +20,7 @@ Internal abstraction points
 * ``_generate``            - provider API call
 * ``_create_tool_object``  - translate tool metadata
 * ``_iter_tool_calls``     - yield ``(name, args, raw)`` triples
-* ``_response_text``       - extract printable text
+* ``response_text``       - extract printable text
 """
 
 from abc import ABC, abstractmethod
@@ -56,21 +56,21 @@ class RateLimitTracker:
 
     def __init__(self, per_min_limit: int):
         self.per_min_limit = per_min_limit
-        self._history: List[datetime] = []
+        self.history: List[datetime] = []
 
     def log_query(self) -> None:
         now = datetime.now()
-        self._history.append(now)
-        self._history = [t for t in self._history if (now - t).seconds <= 60]
+        self.history.append(now)
+        self.history = [t for t in self.history if (now - t).seconds <= 60]
 
     def print(self):
-        print(self._history)
+        print(self.history)
 
     def time_to_wait(self) -> float:
         if self.per_min_limit < 0:
             return 0
         average_wait = 60 / self.per_min_limit
-        n = len(self._history)
+        n = len(self.history)
         # Spend the first quarter of the budget immediately
         # Spend the second quarter of the budget a bit quickly
         # Spend spend the second half slowly enough to avoid rate limiting
@@ -96,9 +96,9 @@ class SimpleModel(ABC):
         verbose: bool = False
     ) -> None:
         self.model_name = model_name
-        self._rate = RateLimitTracker(per_min_limit)
+        self.rate = RateLimitTracker(per_min_limit)
         self.per_day_limit = per_day_limit
-        self._tool_registry: Dict[str, Dict[str, Any]] = {}
+        self.tool_registry: Dict[str, Dict[str, Any]] = {}
         self.verbose = verbose
 
     # ------------------------------------------------------------------
@@ -106,8 +106,8 @@ class SimpleModel(ABC):
     # ------------------------------------------------------------------
 
     def generate_content(self, **kwargs):
-        self._rate.log_query()
-        wait = self._rate.time_to_wait()
+        self.rate.log_query()
+        wait = self.rate.time_to_wait()
         if wait:
             time.sleep(wait)
         # Call subclass's version of llm query
@@ -129,13 +129,13 @@ class SimpleModel(ABC):
         parameters: Dict[str, Dict[str, Any]],
     ) -> Any:
         name = func.__name__
-        if name in self._tool_registry:
+        if name in self.tool_registry:
             print(f"Warning: Tool {name} already registered. Using PREVIOUS definition.")
-            return self._tool_registry[name]["tool"]
+            return self.tool_registry[name]["tool"]
         # call subclass appropriate function to create the tool object itself
         tool_obj = self._create_tool_object(name, description, parameters)
         #
-        self._tool_registry[name] = {
+        self.tool_registry[name] = {
             "function": func, 
             "tool": tool_obj, 
             "description": description, 
@@ -143,9 +143,9 @@ class SimpleModel(ABC):
         return tool_obj
 
     def get_tool(self, name: str):
-        if name not in self._tool_registry:
+        if name not in self.tool_registry:
             print(f"Error: tool {name} is not registered")
-        return self._tool_registry.get(name, {}).get("tool")
+        return self.tool_registry.get(name, {}).get("tool")
 
     # .................................................................
     def apply_tool(self, response, **kwargs):
@@ -157,12 +157,12 @@ class SimpleModel(ABC):
         for name, args, raw in calls:
             # Pass both the LLM supplied arguments AND the user defined **kwargs 
             merged = {**args, **kwargs}
-            if name in self._tool_registry:
+            if name in self.tool_registry:
                 try:    
-                    out = self._tool_registry[name]["function"](**merged)
+                    out = self.tool_registry[name]["function"](**merged)
                     results.append((out, raw))
                 except Exception as e:
-                    print(self._tool_registry[name])
+                    print(self.tool_registry[name])
                     # raise ValueError("Error applying tool", {name}, "\n", raw, "\n", e)
                     print(f"=========\n ERROR applying tool {name}.\nIn: {raw}\nError{e}\n=========")
                     return [("__error__", {}, f"tool call must be valid json: {e}")]                    
@@ -176,7 +176,7 @@ class SimpleModel(ABC):
         if calls:
             print([raw for *_unused, raw in calls])
         else:
-            print(self._response_text(response))
+            print(self.response_text(response))
 
     # ------------------------------------------------------------------
     # Abstract hooks
@@ -205,7 +205,7 @@ class SimpleModel(ABC):
         pass
 
     @abstractmethod
-    def _response_text(self, response) -> str:
+    def response_text(self, response) -> str:
         """
         LLM specific code to extract response text from LLM response
         """
@@ -227,16 +227,13 @@ class GeminiModel(SimpleModel):
         per_min_limit: int = 30,
         per_day_limit: int = 1000,
         # **client_kw: Any,
+        **opts, # Optional arguments (e.g. verbose) to pass to SimpleModel 
     ) -> None:
-        super().__init__(model_name, per_min_limit, per_day_limit)
+        super().__init__(model_name, per_min_limit, per_day_limit, **opts)
         # if genai is None:
         #     raise ImportError("google-genai not installed - `pip install google-genai`.")
-        # api_key = client_kw.pop("api_key", None) or os.getenv("GEMINI_API_KEY")
-        # self._client = genai.Client(api_key=api_key, **client_kw)
         self.API_KEY = os.environ.get("GEMINI_API_KEY")
-        self._client = genai.Client(
-            api_key=self.API_KEY,
-        )
+        self.client = genai.Client( api_key=self.API_KEY )
 
 
     # Provider hooks ----------------------------------------------------
@@ -246,15 +243,12 @@ class GeminiModel(SimpleModel):
     # BUT: Here they have default values of None, so they are actually optional?
     def _generate(
         self,
-        *,
-        # ── OLD parameters ───────────────────────────────────────────
+        *, # Parameters below "*," are optional because they have default values.  Otherwise, they're required
         user_prompt: str | None = None,
         contents: List[gtypes.Content] | None = None,
         tools:    List[Any]           | None = None,
-        # ── NEW multimodal hooks ─────────────────────────────────────
         attachment_names: List[str]   | None = None,
         system_prompt:    str         | None = None,
-        **_,
     ) -> gtypes.GenerateContentResponse:          # type: ignore
         """
         Unified text + multimodal generation helper.
@@ -311,7 +305,7 @@ class GeminiModel(SimpleModel):
             tools=tools,
             response_mime_type="text/plain",
         )
-        return self._client.models.generate_content(
+        return self.client.models.generate_content(
             model=self.model_name,
             contents=contents,
             config=cfg,
@@ -339,7 +333,7 @@ class GeminiModel(SimpleModel):
         else:
             return None
 
-    def _response_text(self, response):
+    def response_text(self, response):
         return getattr(response, "text", "")
 
     @staticmethod
@@ -367,7 +361,6 @@ Message = Dict[str, Union[str, list, dict]]            # helper alias
 class HTTPChatModel(SimpleModel):
     """
     Generic client for any OpenAI-compatible HTTP server (vLLM, Ollama, LocalAI …).
-    Always sends tool specs under the **tools** key, wrapped with {"type": "function"}.
     """
 
     def __init__(
@@ -375,19 +368,20 @@ class HTTPChatModel(SimpleModel):
         model_name: str,
         base_url: str                    = "http://localhost:11434/v1",
         api_key:   str | None            = None,
-        *, # Hardcoded options
+        *, # Parameters below "*," are optional because they have default values.  Otherwise, they're required
         native_tool : bool = True,
         multimodal : bool = False,
-        **opts: Any,
+        **opts, # Additional (optional) arguments show up here. E.g. to pass verbose to SimpleModel wrapper
     ) -> None:
         super().__init__(model_name, **opts)
         self.base_url    = base_url.rstrip("/")
         self.api_key     = api_key or ""
-        self._tools: List[Dict[str, Any]] = []      # raw function specs
 
+        # Set behavior flags
         self.native_tool = native_tool
         self.multimodal = multimodal
 
+        # Create the session for communicating with the LLM
         self.session     = requests.Session()
         self.session.headers.update({"Content-Type": "application/json"})
         if self.api_key:
@@ -406,12 +400,6 @@ class HTTPChatModel(SimpleModel):
         Build an OpenAI-style function spec.  Stored in self._functions and later
         wrapped into the `tools` field at call-time.
         """
-        # spec = {
-        #     "name": name, 
-        #     "description": description, 
-        #     "parameters": parameters,
-        #     "required" : list(parameters.keys())
-        # }
         spec: Dict[str, Any] = {
             "name":        name,
             "description": description,
@@ -421,14 +409,10 @@ class HTTPChatModel(SimpleModel):
                 "required" : list(parameters.keys()),
             },
         }
-        self._tools.append(spec)
         return spec
 
     # ------------------------------------------------------------------
-    # Generation
-    # ------------------------------------------------------------------
-    # ------------------------------------------------------------------
-    # Unified text + multimodal generation (Gemini-compatible signature)
+    # Unified text + multimodal generation 
     # ------------------------------------------------------------------
     def _generate(
         self,
@@ -444,27 +428,23 @@ class HTTPChatModel(SimpleModel):
         **params: Any,
     ) -> Union[Dict[str, Any], Iterator[str]]:
 
-        # Initialize object to send to model
+        # Initialize object we will send to the model
         payload: Dict[str, Any] = {
             "model":    self.model_name,
-            # "messages": messages,
             "stream":   stream,
         }
 
-        
-        # Handle tools if present
+        # Handle tools appropriately (native vs non-native)
         if "tools" in params:
             tools_provided = params["tools"]
 
-            if self.native_tool and len(self._tool_registry)>0: 
+            if self.native_tool and len(self.tool_registry)>0: 
                 # Pass tools in payload (through API)
-                # if self._tools:
-                    payload["tools"] = [
-                        # {"type": "function", "function": spec} for spec in self._tools
-                        {"type": "function", "function": spec} for spec in tools_provided
-                    ]
-            elif len(self._tool_registry)>0: 
-                # Embed tool instructions in system prompt
+                payload["tools"] = [
+                    # {"type": "function", "function": spec} for spec in self._tools
+                    {"type": "function", "function": spec} for spec in tools_provided
+                ]
+            else : # Embed tool instructions in system prompt
                 # 1. Build tool description block
                 tool_persona = "You have access to the following tools."
                 tools_block = yaml.dump(tools_provided)
@@ -487,7 +467,6 @@ class HTTPChatModel(SimpleModel):
                     system_prompt += tool_prompt
                 else:
                     system_prompt = tool_prompt
-                # payload["messages"] = {"role": "system", "content": }
 
                 if self.verbose: print(system_prompt)
 
@@ -512,30 +491,14 @@ class HTTPChatModel(SimpleModel):
             else:
                 # Non multimodal models expect text content only (no parts)
                 messages.append({"role": "user", "content": user_prompt})
-            # msg_parts: List[dict] = []
 
-            # ## Attachments not implemented in Ollama, etc
-            # if self.multimodal and attachment_names:
-            # #     raise NotImplementedError(
-            # #     print(
-            # #         "This HTTP endpoint does not accept image parts. "
-            # #         "Remove `attachment_names` or use a multimodal-capable server."
-            # #     )            # encode attachments (URLs are fine; local files → base64 URI)
-            #     for ref in attachment_names:
-            #         msg_parts.append(self._part_from_ref(ref))
-
-            # # user text
-            # msg_parts.append({"type": "text", "text": user_prompt})
-
-            # messages = []
-            # if system_prompt:
-            #     messages.append({"role": "system", "content": system_prompt})
-
-            # # OpenAI multimodal messages use list-of-parts as `content`
-            # messages.append({"role": "user", "content": msg_parts})
+        elif tool_prompt is not None:
+            print("Warning: passing messages block does not (yet) support non-native tool calling.")
+            #TODO: inspect passed messages for existing system prompt.  
+            #   - append the tool_prompt if it exists 
+            #   - create a new one otherwise
 
         payload["messages"] = messages
-
 
         if self.verbose:
             print("LLM Query JSON:")
@@ -629,7 +592,7 @@ class HTTPChatModel(SimpleModel):
             try:
                 # pull the text between the first and last bracket
                 # ASSUMES the model outputs a SINGLE tool call
-                response_message = self._response_text(response)
+                response_message = self.response_text(response)
                 first = response_message.index("{")
                 last  = response_message.rindex("}") + 1
                 tool_json = json.loads(response_message[first:last])
@@ -647,6 +610,11 @@ class HTTPChatModel(SimpleModel):
                 return [(function_name,args,response)]
             except:
                 return[("Error: tool call must be valid json of correct format",{},response_message)]
+
+    # ------------------------------------------------------------------
+    # Safely extract tool arguments
+    # TODO: Is this really necessary?  Or roll this into the fn that calls it?
+    # ------------------------------------------------------------------
     @staticmethod
     def _parse_args(args_raw: Any) -> Dict[str, Any]:
         if isinstance(args_raw, str):
@@ -655,7 +623,7 @@ class HTTPChatModel(SimpleModel):
         return args_raw if isinstance(args_raw, dict) else {}
 
     # ------------------------------------------------------------------
-    def _response_text(self, response: Dict[str, Any]) -> str:
+    def response_text(self, response: Dict[str, Any]) -> str:
         try:
             return (
                 response.get("choices", [{}])[0]

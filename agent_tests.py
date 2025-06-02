@@ -74,7 +74,7 @@ for _ in range(3) :
     sup_line = sup.generate_speech(observation = observation , 
                                     # format = "Output a single sentence or paragraph."
                                     )
-    sup_line = freemodel._response_text(sup_line)
+    sup_line = freemodel.response_text(sup_line)
     observation = "Support says: " + sup_line
     mem_customer.add_memory(observation)
     mem_support.add_memory(observation)
@@ -95,7 +95,7 @@ for _ in range(3) :
                                     # format = "Output a single sentence or paragraph."
                                     )
     print(cust_line)
-    cust_line = freemodel._response_text(cust_line)
+    cust_line = freemodel.response_text(cust_line)
     observation = "Customer says: " + cust_line
     mem_customer.add_memory(observation)
     mem_support.add_memory(observation)

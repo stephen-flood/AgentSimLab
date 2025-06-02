@@ -45,7 +45,7 @@ class Location:
        print(f"Warning: {self.name} and {location.name} are not adjacent, so connection cannot be removed.")
 
   def description(self):
-    return yaml.dump(self.description_dictionary())
+    return yaml.dump(self.description_dictionary(),sort_keys=False)
 
   def description_dictionary(self):
     adjacent_descriptions = []
@@ -183,7 +183,7 @@ class World:
     for location in self.locations:
       loc_desc = location.description_dictionary()
       location_descriptions.append(loc_desc)
-    print(yaml.dump(location_descriptions))
+    print(yaml.dump(location_descriptions,sort_keys=False))
 
 
   
