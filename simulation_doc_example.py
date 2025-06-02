@@ -1,9 +1,13 @@
-from model  import GeminiModel
+from model  import GeminiModel, HTTPChatModel
 from world  import World
 from agent  import SimpleAgent
 
 # 1️⃣  Create the shared language model
-llm = GeminiModel("gemini-2.0-flash-lite", 25, 1000)
+# llm = GeminiModel("gemini-2.0-flash-lite", 25, 1000)
+# llm = GeminiModel("gemini-2.0-flash", 15, 1000)
+# llm = GeminiModel("gemini-2.5-flash-preview-04-17", 10, 1000)
+llm = HTTPChatModel("mistral-small:24b-instruct-2501-q4_K_M")
+# llm = HTTPChatModel("gemma3:12b", native_tool=False)
 
 # 2️⃣  Describe the physical space
 rooms = ["kitchen", "living", "garden"]
@@ -74,9 +78,21 @@ class Simulation:
             action = ag.generate_action(tools=self.tools, plan=plan)
 
             # ➌ Observe: execute any tool calls and store what happened
-            for text, call in llm.apply_tool(action, world=self.world, agent=ag):
-                ag.add_memory("Observation: " + text)
-                print(text)
+            # OPTIONAL: Describe tools you plan to call
+            tool_call_list = llm._iter_tool_calls(action)
+            if tool_call_list is not None:
+                for call in tool_call_list:
+                    intended_action = f"Calling {call[0]} with arguments {call[1]}"
+                    ag.add_memory("Attempting Action: " + intended_action)
+                    print("Attempting Action: " + intended_action)
+            else: 
+                print("No tools called")
+
+            # ACTUALLY call the tools
+            observe = llm.apply_tool(action, world=self.world, agent=ag)
+            for result in observe:
+                ag.add_memory("Observation: " + str(result[0]))
+                print("Observation: " + str(result[0]))
 
         self.t += 1
 

@@ -17,8 +17,8 @@ from agent  import SimpleAgent
 # model = GeminiModel("gemini-2.0-flash-lite", 25, 1000)
 # model = GeminiModel("gemini-2.0-flash", 15, 1000)
 # model = GeminiModel("gemini-2.5-flash-preview-04-17", 10, 1000)
-model = HTTPChatModel("mistral-small:24b-instruct-2501-q4_K_M")
-# model = HTTPChatModel("gemma3:12b", native_tool=False)
+# model = HTTPChatModel("mistral-small:24b-instruct-2501-q4_K_M")
+model = HTTPChatModel("gemma3:12b", native_tool=False)
 
 # ---------- 2.  Build the world ---------------------------------------------
 rooms   = ["living", "kitchen", "bathroom", "bedroom", "office", "garden"]
@@ -117,8 +117,8 @@ class Simulation:
             # print(agent.description())
             if self.t == 0:
                 plan = agent.generate_plan(tools=self.tools)
-                agent.add_memory("Plan: " + plan)
-                print("Plan: " + plan)
+                # agent.add_memory("Plan: " + plan)
+                # print("Plan: " + plan)
             else:
                 # plan = agent.generate_plan(context = "Summarize what you have attempted, then formulate your plan. Always look for something NEW to try.")
                 plan = agent.generate_plan(context = "Start by summarizing what you have already done. Look for new arguments for tools you have already", tools=self.tools)
@@ -127,6 +127,8 @@ class Simulation:
             print("Plan: " + plan)
 
             act  = agent.generate_action(tools=self.tools)
+
+            # OPTIONAL: Describe the tools to be called BEFORE calling them
             tool_call_list = model._iter_tool_calls(act)
             if tool_call_list is not None:
                 for call in tool_call_list:
@@ -136,6 +138,7 @@ class Simulation:
             else: 
                 print("No tools called")
 
+            # ACTUALLY call the tools:
             observe = self.world.model.apply_tool(act, world=self.world, agent=agent)
             for result in observe:
                 agent.add_memory("Observation: " + str(result[0]))
