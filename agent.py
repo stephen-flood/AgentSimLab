@@ -2,7 +2,7 @@ from typing import List, Tuple
 import re # Parse model response to decide if we should end the conversation.
           # TODO: replace this with a tool call?
 from datetime import datetime
-from model import GeminiModel, Prompt, RateLimitTracker
+from model import SimpleModel, GeminiModel, Prompt, RateLimitTracker
 import yaml 
 
 ## Basic Memory Class (modified, simplified more)
@@ -57,7 +57,8 @@ class SelfCompressingMemory():
       prompt = Prompt(
         persona = "You are an agent with limited memory.  You need to process the YAML representation of your current memory to REDUCE the number of characters below your maximum threshold.",
         max_chars = self.max_chars,
-        instruction = "Write a List of the most relevant information from your MEMORY in YAML format.  Use your MEMORY for detailed information about your task.",
+        # instruction = "Write a List of the most relevant information from your MEMORY in YAML format.  Use your MEMORY for detailed information about your task.",
+        instruction = "Write down the most relevant information from your MEMORY in YAML format.  Use your MEMORY for detailed information about your task.",
         memory = memory_yaml,
       ).generate()
       compressed_memory = self.model.generate_content(user_prompt=prompt)
@@ -82,7 +83,7 @@ class SimpleAgent:
     Args: 
     - name (str): required, must be unique
     - list of all other attributes
-      - required: model (GeminiModel), tools (List)
+      - required: model (SimpleModel), tools (List)
       - optional: any other attribute you'd like the model to store
                   (eg persona, memory, location, etc.)
       - IMPORTANT: each `optional` object MUST have a __str__ function defined for its object
@@ -94,6 +95,8 @@ class SimpleAgent:
     self.model = kwargs["model"] if "model" in kwargs else GeminiModel()
     self.tools = kwargs["tools"] if "tools" in kwargs else []
     # "location" and "memory" are not special because they have a __str__ method that is called in prompting and describing
+
+    self.verbose = False
 
     if "attribute_dictionary" in kwargs:
      self.attribute_dictionary = kwargs["attribute_dictionary"]
@@ -130,8 +133,7 @@ class SimpleAgent:
 
     response = self.generate_content(**prompt_dict)    
 
-    return response.text
-    # return self.model._response_text(response)
+    return self.model._response_text(response)
 
 
   def generate_action(self,**kwargs):
@@ -170,8 +172,7 @@ class SimpleAgent:
     #   prompt_dict["current location"] = self.attribute_dictionary["location"].name
 
     response = self.generate_content(**prompt_dict)    
-    return response.text
-    # return self.model._response_text(response)
+    return self.model._response_text(response)
 
   def generate_content(self,**kwargs):
     """
@@ -206,6 +207,8 @@ class SimpleAgent:
     prompt_dictionary = attribute_dict | arg_dict 
     prompt = Prompt(**prompt_dictionary)
     prompt = prompt.generate()
+
+    if self.verbose: print(prompt)
 
     response = self.model.generate_content(user_prompt=prompt, **model_params)
     return response

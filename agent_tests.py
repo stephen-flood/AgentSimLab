@@ -1,5 +1,5 @@
 from agent import SimpleAgent, SimpleMemory
-from model import GeminiModel
+from model import GeminiModel, HTTPChatModel
 
 """## Run a (simple) conversation between agents."""
 
@@ -17,10 +17,13 @@ mem_support  = SimpleMemory()
 
 print(str(mem_support))
 
-freemodel = GeminiModel("gemini-2.0-flash-lite", 30, 1000)
+# freemodel = GeminiModel("gemini-2.0-flash-lite", 30, 1000)
+# freemodel = HTTPChatModel("mistral-small:24b-instruct-2501-q4_K_M")
+freemodel = HTTPChatModel("gemma3:12b", native_tool=False)
+
 
 cust = SimpleAgent("Customer",
-                   persona = "impatient, tech‑savvy",
+                   persona = "impatient, tech-savvy",
                    status = "has a phone that keeps restarting",
                    workflow = "Explain the issue.  Attempt to follow the instructions.  ALWAYS use `check` tool before saying whether the phone is still broken.  Only accept the resolution if the phone works or you get a refund.",
                    memory = mem_customer,
@@ -50,7 +53,8 @@ observation = 'Customer says: "My jPhone-72 phone keeps rebooting!"'
 mem_customer.add_memory(observation)
 mem_support.add_memory(observation)
 print(observation,"\n")
-for _ in range(3) :
+# for _ in range(3) :
+for _ in range(30) :
     # cont, sup_line = sup.respond(observation)
     # sup_line = sup.generate_speech(observation = observation )
     # sup_line = sup.generate_content(observation = observation , 
@@ -67,7 +71,7 @@ for _ in range(3) :
     sup_action = sup.generate_action(model_parameters={"tools":[refund]})
     sup_action = freemodel.apply_tool(sup_action)
     for action in sup_action:
-        description = "Support action: " + action[0][0]
+        description = "Support action: " + str(action)
         mem_customer.add_memory(description)
         mem_support.add_memory( description)
     print(sup_action)
@@ -97,13 +101,9 @@ for _ in range(3) :
     cust_action = freemodel.apply_tool(cust_action)
     print(cust_action)
     for action in cust_action:
-        print("Desc", action[0][0])
-        description = "Customer action:" + action[0][0]
+        description = "Customer action:" + str(action)
         mem_customer.add_memory( description )
         mem_support.add_memory(  description )
-        if action[0][0] == "Phone is now working": 
-            exit
-
     print(cust_action)
 
     # result = "Customer acts: " + cust_action
