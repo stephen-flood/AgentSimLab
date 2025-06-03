@@ -39,6 +39,7 @@ agents  = [
         "observation":"I am having a great time.",
         "status":"playing",
         "persona":"active", 
+        "persona":"active", 
         "location":"garden"},
     {"name":"Catherine",
         "goal":"I need to TELL Timmy to do his homework. I need to find the LOCATION that contains Timmy. I should first CHECK if my CURRENT LOCATION.  If not I should MOVE to a new LOCATION to check if he is there. REMEMBER to alternate looking and moving.",

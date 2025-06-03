@@ -93,13 +93,17 @@ class SimpleModel(ABC):
         per_min_limit: int = -1,
         per_day_limit: int = -1,
         *,
-        verbose: bool = False
+        verbose: bool = False,
+        **kwargs
     ) -> None:
         self.model_name = model_name
         self.rate = RateLimitTracker(per_min_limit)
         self.per_day_limit = per_day_limit
         self.tool_registry: Dict[str, Dict[str, Any]] = {}
         self.verbose = verbose
+        self.native_tool = kwargs["native_tool"] if "native_tool" in kwargs else True
+
+        self.allow_system_prompt = kwargs["allow_system_prompt"] if "allow_system_prompt" in kwargs else True
 
     # ------------------------------------------------------------------
     # Public methods
@@ -110,9 +114,59 @@ class SimpleModel(ABC):
         wait = self.rate.time_to_wait()
         if wait:
             time.sleep(wait)
+
+        # Handle non-native tool calling by embedding description into system prompt
+        if not self.native_tool and "tools" in kwargs: 
+            if self.verbose: print("Processing non-native tools")
+
+            tools_provided = kwargs["tools"]
+            # Embed tool instructions in system prompt
+            # 1. Build tool description block
+            tool_persona = "You have access to the following tools."
+            tools_block = yaml.dump(tools_provided)
+            # tools_block = []
+            # for spec in self._tools:
+                # tools_block.append(
+                #     f"- {spec['name']} :: {spec['description']}  "
+                #     f"params = {json.dumps(spec['parameters']['properties'])}"
+                # )
+            guard = (
+                "You may call **one** function. "
+                "If you do, respond with *only* this JSON:\n"
+                '{ "function": <func_name>, "arguments": {<arg_name_1>:<arg_val_1>, <arg_name_2>:<arg_val_2>,...}}'
+            )
+            tool_prompt  = f"{tool_persona}\nTOOLS:\n{tools_block}\n{guard}"
+            if "messages" in kwargs:
+                print("Warning: tool instruction not added to pre-existing messages")
+
+            if "system_prompt" in kwargs:
+                kwargs["system_prompt"] += tool_prompt
+            else:
+                kwargs["system_prompt"] = tool_prompt
+
+            if self.verbose: print(kwargs["system_prompt"])
+        
+        if self.verbose:
+            print("kwargs")
+            pprint.pp(kwargs)
+
+
+        # Handle models that do not allow system prompts
+        if not self.allow_system_prompt and "system_prompt" in kwargs:
+            print("Processing forbidden system prompt")
+            system_prompt = kwargs.pop("system_prompt")
+            user_prompt = kwargs["user_prompt"] if "user_prompt" else ""
+            kwargs["user_prompt"] = "BEGIN SYSTEM PROMPT\n" \
+                                    + system_prompt         \
+                                    + "\nEND SYSTEM PROMPT\n\nBEGIN USER PROMPT\n" \
+                                    + user_prompt           \
+                                    + "\n END USER PROMPT"
+        if not self.allow_system_prompt and "messages" in kwargs:
+            print("WARNING: not fixing system prompts in messages list")
+
         # Call subclass's version of llm query
         try:
-            content = self._generate(**kwargs)
+            content = self._generate(verbose=self.verbose,**kwargs)
         except Exception as e:
             print("Error generating content:" , e)
             pprint.pp(kwargs)
@@ -249,6 +303,7 @@ class GeminiModel(SimpleModel):
         tools:    List[Any]           | None = None,
         attachment_names: List[str]   | None = None,
         system_prompt:    str         | None = None,
+        **kwargs,
     ) -> gtypes.GenerateContentResponse:          # type: ignore
         """
         Unified text + multimodal generation helper.
@@ -300,9 +355,14 @@ class GeminiModel(SimpleModel):
             )
             contents = contents_list   # now fully assembled
 
+
+        if "native_tool" in kwargs:
+            if not kwargs["native_tool"]:
+                tools=None
+
         # ------------------------------------------------------------------
         cfg = gtypes.GenerateContentConfig(
-            tools=tools,
+            # tools=tools,
             response_mime_type="text/plain",
         )
         return self.client.models.generate_content(
@@ -434,41 +494,38 @@ class HTTPChatModel(SimpleModel):
             "stream":   stream,
         }
 
-        # Handle tools appropriately (native vs non-native)
-        if "tools" in params:
-            tools_provided = params["tools"]
+        # Handle native tools
+        # Non-native tool calling already handled by generate_content in SimpleModel 
+        if "tools" in params and self.native_tool:
+            payload["tools"] = [
+                {"type": "function", "function": spec} for spec in params["tools"]
+            ]
 
-            if self.native_tool and len(self.tool_registry)>0: 
-                # Pass tools in payload (through API)
-                payload["tools"] = [
-                    # {"type": "function", "function": spec} for spec in self._tools
-                    {"type": "function", "function": spec} for spec in tools_provided
-                ]
-            else : # Embed tool instructions in system prompt
-                # 1. Build tool description block
-                tool_persona = "You have access to the following tools."
-                tools_block = yaml.dump(tools_provided)
-                # tools_block = []
-                # for spec in self._tools:
-                    # tools_block.append(
-                    #     f"- {spec['name']} :: {spec['description']}  "
-                    #     f"params = {json.dumps(spec['parameters']['properties'])}"
-                    # )
-                guard = (
-                    "You may call **one** function. "
-                    "If you do, respond with *only* this JSON:\n"
-                    '{ "function": <func_name>, "arguments": {<arg_name_1>:<arg_val_1>, <arg_name_2>:<arg_val_2>,...}}'
-                )
-                tool_prompt  = f"{tool_persona}\nTOOLS:\n{tools_block}\n{guard}"
-                if messages:
-                    print("Warning: tool instruction not added to pre-existing messages")
+        # else : # Embed tool instructions in system prompt
+        #     # 1. Build tool description block
+        #     tool_persona = "You have access to the following tools."
+        #     tools_block = yaml.dump(tools_provided)
+        #     # tools_block = []
+        #     # for spec in self._tools:
+        #         # tools_block.append(
+        #         #     f"- {spec['name']} :: {spec['description']}  "
+        #         #     f"params = {json.dumps(spec['parameters']['properties'])}"
+        #         # )
+        #     guard = (
+        #         "You may call **one** function. "
+        #         "If you do, respond with *only* this JSON:\n"
+        #         '{ "function": <func_name>, "arguments": {<arg_name_1>:<arg_val_1>, <arg_name_2>:<arg_val_2>,...}}'
+        #     )
+        #     tool_prompt  = f"{tool_persona}\nTOOLS:\n{tools_block}\n{guard}"
+        #     if messages:
+        #         print("Warning: tool instruction not added to pre-existing messages")
 
-                if system_prompt:
-                    system_prompt += tool_prompt
-                else:
-                    system_prompt = tool_prompt
+        #     if system_prompt:
+        #         system_prompt += tool_prompt
+        #     else:
+        #         system_prompt = tool_prompt
 
-                if self.verbose: print(system_prompt)
+        #     if self.verbose: print(system_prompt)
 
         # -------- assemble messages list if caller used shortcuts -----
         if messages is None:
@@ -492,7 +549,7 @@ class HTTPChatModel(SimpleModel):
                 # Non multimodal models expect text content only (no parts)
                 messages.append({"role": "user", "content": user_prompt})
 
-        elif tool_prompt is not None:
+        elif self.native_tool is False:
             print("Warning: passing messages block does not (yet) support non-native tool calling.")
             #TODO: inspect passed messages for existing system prompt.  
             #   - append the tool_prompt if it exists 
@@ -648,7 +705,8 @@ class Prompt:
   def __init__(self, **kwargs):
 
     self.details = {}
-    self.verbose = False # for testing/debugging
+    # self.verbose = False # for testing/debugging
+    self.verbose=False
 
     # Put standard prompt elements in a specific order
     prompt_elements = ["persona","context","instruction","input","tone","output_format","examples"]

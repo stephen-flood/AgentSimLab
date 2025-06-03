@@ -7,18 +7,41 @@ from model import Prompt
 
 import pprint 
 
-# freemodel = GeminiModel("gemini-2.0-flash-lite", 30)
-# freemodel = HTTPChatModel("mistral-small:24b-instruct-2501-q4_K_M")
-# freemodel = HTTPChatModel("mistral-small:24b-instruct-2501-q4_K_M",native_tool=False,verbose=True)
-# freemodel = HTTPChatModel("gemma3:27b", multimodal=True, native_tool=False, verbose=False)
-freemodel = HTTPChatModel("gemma3:12b", multimodal=True, native_tool=False, verbose=False)
+# Gemma models, google API: 
+# NO native tool use
+# NO system prompt :(
+freemodel = GeminiModel(
+    "gemma-3-27b-it",
+    # "gemma-3n-e4b-it",
+    30,    
+    native_tool = False,
+    verbose = False,
+    allow_system_prompt = False,
+)
+
+# Gemini models, google API ONLY
+# compare native/non-native tool use
+# freemodel = GeminiModel(
+#     "gemini-2.0-flash-lite", 
+#     30,
+#     native_tool = True,
+#     verbose=False
+#     )
+
+# # Any OpenAPI compatible provider
+# freemodel = HTTPChatModel(
+#     # "mistral-small:24b-instruct-2501-q4_K_M"
+#     "gemma3:12b", 
+#     multimodal=True, 
+#     native_tool=False, 
+#     verbose=False)
 
 
 """## Model Wrapper: Example Usage"""
 
-test_prompt = True
+test_prompt = False
 test_tools = True
-test_multimodal = True
+test_multimodal = False
 
 if test_prompt:
   print("============== PROMPT TEST 1 ==============")
@@ -100,8 +123,17 @@ if test_tools:
   for i in range(num_tests):
     print(f"Performing test {i+1} of {num_tests}")
     response = freemodel.generate_content( user_prompt="Write a short sentence about first name John, second name Newton.  Use function calling as needed.", tools=[tool])
-    freemodel.print_response(response)
-    print('tool call result:' , freemodel.apply_tool(response))
+    tool_call_list = freemodel._iter_tool_calls(response)
+    if tool_call_list is not None:
+      for call in tool_call_list:
+        print(call)
+    else: 
+      print("WARNING: No tool calls")
+      freemodel.print_response(response)
+    # freemodel.print_response(response)
+    # print('\nModel response:\n',freemodel.response_text(response))
+    ## Observe *RESULT* of calling the tool functions
+    # print('\nTool call result:' , freemodel.apply_tool(response))
     print("--------------------------")
 
 if test_multimodal:
