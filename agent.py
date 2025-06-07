@@ -40,11 +40,18 @@ class Location:
 
 ## Variant of SimpleMemory that automatically compresses itself using an agent's LLM
 class SelfCompressingMemory():
-  def __init__(self, max_chars, model, memories: List[str] | None = None):
+  def __init__(self, max_chars, model, memories: List[str] | None = None, **kwargs):
     self.max_chars = max_chars
     self.model = model
-
     self.verbose = False
+
+    # Set persona and instruction
+    default_persona = "You are an agent with limited memory.  You need to process the YAML representation of your current memory to REDUCE the number of characters below your maximum threshold."
+    self.persona = kwargs["persona"] if "persona" in kwargs else default_persona
+    #
+    default_instruction = "Write down the most relevant information from your MEMORY in YAML format.  Use your MEMORY for detailed information about your task."
+    self.instruction = kwargs["instruction"] if "instruction" in kwargs else default_instruction
+
 
     if memories is None:
       memories = []
@@ -62,10 +69,9 @@ class SelfCompressingMemory():
     memory_yaml = str(self)
     if len(memory_yaml) > self.max_chars:
       prompt = Prompt(
-        persona = "You are an agent with limited memory.  You need to process the YAML representation of your current memory to REDUCE the number of characters below your maximum threshold.",
+        persona = self.persona,
         max_chars = self.max_chars,
-        # instruction = "Write a List of the most relevant information from your MEMORY in YAML format.  Use your MEMORY for detailed information about your task.",
-        instruction = "Write down the most relevant information from your MEMORY in YAML format.  Use your MEMORY for detailed information about your task.",
+        instruction = self.instruction,
         memories = memory_yaml,
       ).generate()
       compressed_memory_response = self.model.generate_content(user_prompt=prompt)
@@ -101,11 +107,20 @@ class SimpleAgent:
     """
     Args: 
     - name (str): required, must be unique
+
+    - Special
+      - plan_instruct_template = instruction template provided on .generate_plan(...)
+      - action_instruct_template = instruction template provided on .generate_action(...)
+      - speech_instruct_template = instruction template provided on .generate_speech(...)
+      - tools = list of tool objects registered with the model
+
     - list of all other attributes
-      - required: model (SimpleModel), tools (List)
+      - required: model (SimpleModel), 
       - optional: any other attribute you'd like the model to store
-                  (eg persona, memory, location, etc.)
-      - IMPORTANT: each `optional` object MUST have a __str__ function defined for its object
+        - persona, memory, location, memory, etc
+
+    - IMPORTANT: each `optional` object MUST have a __str__ function defined for its object
+
     """
     self.name = name
   
@@ -116,6 +131,13 @@ class SimpleAgent:
     # "location" and "memory" are not special because they have a __str__ method that is called in prompting and describing
 
     self.verbose = False
+
+    default_plan_instruct_template = "First, identify what {self.name} would do.  Then make a very short plan to achieve those goals.  Find a SMALL NUMBER of concrete steps that can be taken.  Take available tools into account in your planning, but DO NOT do any tool calls."
+    self.plan_instruct_template = kwargs.pop("plan_instruct_template", default_plan_instruct_template)
+    default_action_instruct_template = "What would {self.name} do? "
+    self.action_instruct_template = kwargs.pop("action_instruct_template", default_action_instruct_template)
+    default_speech_instruct_template = "What would {self.name} say?"
+    self.speech_instruct_template = kwargs.pop("speech_instruct_template", default_speech_instruct_template)
 
     if "attribute_dictionary" in kwargs:
      self.attribute_dictionary = kwargs["attribute_dictionary"]
@@ -143,7 +165,8 @@ class SimpleAgent:
     """
     prompt_dict = kwargs
     prompt_dict["name"] = self.name
-    prompt_dict["instruction"] = f"First, identify what would {self.name} do.  Then make a very short plan to achieve those goals.  Find a SMALL NUMBER of concrete steps that can be taken.  Take available tools into account in your planning, but DO NOT do any tool calls."
+    # prompt_dict["instruction"] = f"First, identify what would {self.name} do.  Then make a very short plan to achieve those goals.  Find a SMALL NUMBER of concrete steps that can be taken.  Take available tools into account in your planning, but DO NOT do any tool calls."
+    prompt_dict["instruction"] = self.plan_instruct_template.format(self=self, kwargs=kwargs)
 
     ## OPTIONAL: automatically include full description of location
     ## ALTERNATIVE: provide "get_room_description" tool that agent can call
@@ -161,9 +184,10 @@ class SimpleAgent:
     """
     prompt_dict = kwargs
     prompt_dict["name"] = self.name
-    prompt_dict["instruction"] = f"What would {self.name} do? "
-    if "system" not in kwargs and "tools" in kwargs: 
-      prompt_dict["system"] = f"You are {self.model.model_name}, a tool using model from Google. Use tools when needed."
+    prompt_dict["instruction"] = self.action_instruct_template.format(self=self, kwargs=kwargs)
+    # prompt_dict["instruction"] = f"What would {self.name} do? "
+    # if "system" not in kwargs and "tools" in kwargs: 
+    #   prompt_dict["system"] = f"You are {self.model.model_name}, a tool using model from Google. Use tools when needed."
 
     ## OPTIONAL: automatically include full description of location
     ## ALTERNATIVE: provide "get_room_description" tool that agent can call
@@ -180,10 +204,11 @@ class SimpleAgent:
     """
     prompt_dict = kwargs
     prompt_dict["name"] = self.name
-    if "interlocutor_name" in kwargs:
-      prompt_dict["instruction"] = f"What would {self.name} say to {kwargs["interlocutor_name"]}?"
-    else:
-      prompt_dict["instruction"] = f"What would {self.name} say?"
+    prompt_dict["instruction"] = self.speech_instruct_template.format(self=self, kwargs=kwargs)
+    # if "interlocutor_name" in kwargs:
+    #   prompt_dict["instruction"] = f"What would {self.name} say to {kwargs["interlocutor_name"]}?"
+    # else:
+    #   prompt_dict["instruction"] = f"What would {self.name} say?"
 
     ## OPTIONAL: automatically include full description of location
     ## ALTERNATIVE: provide "get_room_description" tool that agent can call

@@ -931,8 +931,8 @@ class Prompt:
   def __init__(self, **kwargs):
 
     self.details = {}
-    # self.verbose = False # for testing/debugging
-    self.verbose=False
+    self.verbose = False # for testing/debugging
+    # self.verbose=True
 
     # Put standard prompt elements in a specific order
     prompt_elements = ["persona","context","instruction","input","tone","output_format","examples"]

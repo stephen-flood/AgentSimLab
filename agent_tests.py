@@ -22,7 +22,8 @@ print(str(mem_support))
 # freemodel = HTTPChatModel("mistral-small:24b-instruct-2501-q4_K_M")
 freemodel = HTTPChatModel("gemma3:12b", 
                           native_tool=False, 
-                          verbose=True,
+                        #   verbose=True,
+                          verbose=False,
                           )
 
 cust = SimpleAgent("Customer",

@@ -21,8 +21,18 @@ freemodel = HTTPChatModel("gemma3:12b", native_tool=False)
 # agent_mem = SimpleMemory()
 agent_mem = SelfCompressingMemory(100000,freemodel)
 
+# Initially, copied from agent.py 
+# Eventually: modify by hand or have LLM explore prompts agentically
+default_plan_instruct_template = "First, identify what {self.name} would do.  Then make a very short plan to achieve those goals.  Find a SMALL NUMBER of concrete steps that can be taken.  Take available tools into account in your planning, but DO NOT do any tool calls."
+default_action_instruct_template = "What would {self.name} do? "
+default_speech_instruct_template = "What would {self.name} say?"
+
+# Initialize agent
 agent = SimpleAgent(
     "investigator",
+    plan_instruction_template = default_plan_instruct_template,
+    action_instruction_template = default_action_instruct_template,
+    speech_instruction_template = default_speech_instruct_template,
     memory = agent_mem,
     model = freemodel,
 )
