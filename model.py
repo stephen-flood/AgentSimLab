@@ -109,7 +109,21 @@ class SimpleModel(ABC):
     # Public methods
     # ------------------------------------------------------------------
 
-    def generate_content(self, **kwargs):
+    def generate_content(self,
+                         *, # args below will be displayed as hints
+                         user_prompt : str |  None = None,
+                         system_prompt : str |  None = None,
+                        #  history : List[dict] |  None = None,
+                          **kwargs):
+
+        # append expected args to kwargs for processing
+        if user_prompt:         
+            kwargs["user_prompt"] = user_prompt
+        if system_prompt:
+            kwargs["system_prompt"] = system_prompt
+        # if history:
+        #     kwargs["history"] = history
+
         self.rate.log_query()
         wait = self.rate.time_to_wait()
         if wait:
@@ -171,6 +185,38 @@ class SimpleModel(ABC):
             print("Error generating content:" , e)
             pprint.pp(kwargs)
             content = None
+
+        # Update history
+        # if history is not None:
+        #     if system_prompt:
+        #         history.append(
+        #             {
+        #                 "role" : "system",
+        #                 "content" : kwargs["system_prompt"]
+        #             }
+        #         )
+        #     if user_prompt:
+        #         history.append(
+        #             {
+        #                 "role" : "user",
+        #                 "content" : kwargs["user_prompt"]
+        #             }
+        #         )
+        #     if self._iter_tool_calls(content) is not None:
+        #         history.append(
+        #             {
+        #                 "role" : "assistant",
+        #                 "content" : str(self._iter_tool_calls(content))
+        #             }
+        #         )
+        #     else:
+        #         history.append(
+        #             {
+        #                 "role" : "assistant",
+        #                 "content" : self.response_text(content)
+        #             }
+        #         )
+
         return content
 
     generate = generate_content  # ergonomic alias
@@ -361,10 +407,16 @@ class GeminiModel(SimpleModel):
                 tools=None
 
         # ------------------------------------------------------------------
-        cfg = gtypes.GenerateContentConfig(
-            # tools=tools,
-            response_mime_type="text/plain",
-        )
+        if self.native_tool:
+            cfg = gtypes.GenerateContentConfig(
+                tools=tools,
+                response_mime_type="text/plain",
+            )
+        else:
+            cfg = gtypes.GenerateContentConfig(
+                response_mime_type="text/plain",
+            )
+            
         return self.client.models.generate_content(
             model=self.model_name,
             contents=contents,
@@ -494,38 +546,14 @@ class HTTPChatModel(SimpleModel):
             "stream":   stream,
         }
 
+        tools_used = params["tools"]
+        if self.verbose: print(tools_used)
         # Handle native tools
         # Non-native tool calling already handled by generate_content in SimpleModel 
         if "tools" in params and self.native_tool:
             payload["tools"] = [
-                {"type": "function", "function": spec} for spec in params["tools"]
+                {"type": "function", "function": spec} for spec in tools_used
             ]
-
-        # else : # Embed tool instructions in system prompt
-        #     # 1. Build tool description block
-        #     tool_persona = "You have access to the following tools."
-        #     tools_block = yaml.dump(tools_provided)
-        #     # tools_block = []
-        #     # for spec in self._tools:
-        #         # tools_block.append(
-        #         #     f"- {spec['name']} :: {spec['description']}  "
-        #         #     f"params = {json.dumps(spec['parameters']['properties'])}"
-        #         # )
-        #     guard = (
-        #         "You may call **one** function. "
-        #         "If you do, respond with *only* this JSON:\n"
-        #         '{ "function": <func_name>, "arguments": {<arg_name_1>:<arg_val_1>, <arg_name_2>:<arg_val_2>,...}}'
-        #     )
-        #     tool_prompt  = f"{tool_persona}\nTOOLS:\n{tools_block}\n{guard}"
-        #     if messages:
-        #         print("Warning: tool instruction not added to pre-existing messages")
-
-        #     if system_prompt:
-        #         system_prompt += tool_prompt
-        #     else:
-        #         system_prompt = tool_prompt
-
-        #     if self.verbose: print(system_prompt)
 
         # -------- assemble messages list if caller used shortcuts -----
         if messages is None:
@@ -563,7 +591,19 @@ class HTTPChatModel(SimpleModel):
 
         url  = f"{self.base_url}/chat/completions"
         resp = self.session.post(url, json=payload, stream=stream)
-        resp.raise_for_status()
+        # resp.raise_for_status()
+        resp = self.session.post(url, json=payload, stream=stream)
+
+        try:
+            resp.raise_for_status()
+        except requests.HTTPError as e:
+            print("Ollama returned ERROR: ", resp.status_code)
+            try:
+                pprint.pp( json.loads(resp.text) )
+            except:
+                print( resp.text )
+            # raise
+            return {}
 
         if not stream:
             return resp.json()
@@ -632,14 +672,20 @@ class HTTPChatModel(SimpleModel):
         if self.verbose: print("Parsing response for tool calls.  Response: ", response )
 
         if self.native_tool:
+            print("Response",response)
             msg = response.get("choices", [{}])[0].get("message", {})
 
             # Recieve calls from OpenAPI  
             for tc in msg.get("tool_calls", []):
                 fn  = tc.get("function", {})
                 name, args_raw = fn.get("name"), fn.get("arguments", {})
+
+                if isinstance(args_raw, str):
+                    try:   args = json.loads(args_raw)
+                    except json.JSONDecodeError: args = {}
+
                 # if name:
-                calls.append((name, self._parse_args(args_raw), tc))
+                calls.append((name, args, tc))
                 # print(tc)
                 # print(name, args_raw)
 
@@ -669,17 +715,6 @@ class HTTPChatModel(SimpleModel):
                 return[("Error: tool call must be valid json of correct format",{},response_message)]
 
     # ------------------------------------------------------------------
-    # Safely extract tool arguments
-    # TODO: Is this really necessary?  Or roll this into the fn that calls it?
-    # ------------------------------------------------------------------
-    @staticmethod
-    def _parse_args(args_raw: Any) -> Dict[str, Any]:
-        if isinstance(args_raw, str):
-            try:   return json.loads(args_raw)
-            except json.JSONDecodeError: return {}
-        return args_raw if isinstance(args_raw, dict) else {}
-
-    # ------------------------------------------------------------------
     def response_text(self, response: Dict[str, Any]) -> str:
         try:
             return (
@@ -691,6 +726,182 @@ class HTTPChatModel(SimpleModel):
         except:
             # print("ERROR parsing response text.  Full response:", str)
             return str(response)
+
+###############################################################################
+# Hugging Face Transformers  (transformers ≥ 4.41 recommended)
+###############################################################################
+###############################################################################
+# Hugging Face Transformers (transformers ≥ 4.41)
+###############################################################################
+try:
+    from transformers import (
+        AutoTokenizer,
+        AutoModelForCausalLM,
+        PreTrainedTokenizerBase,
+    )
+    import torch, re as _re, json as _json
+    if hasattr(torch, "_dynamo"):
+        torch._dynamo.config.suppress_errors = True
+except ModuleNotFoundError:                                # library optional
+    AutoTokenizer = AutoModelForCausalLM = PreTrainedTokenizerBase = None  # type: ignore
+
+
+class HFTransformersModel(SimpleModel):
+    """
+    Wrapper for chat-template-aware Hugging Face models (Zephyr-β, Llama-3-
+    Instruct, Phi-3-mini-chat, …).  When *native_tool=True* we hand the tool
+    schema to `tokenizer.apply_chat_template`; otherwise the base class embeds
+    tool instructions in the system prompt.
+    """
+
+    # ――― tiny “call” object so `apply_tool` works the same way ―――
+    class _ToolCall:
+        def __init__(self, name: str, args: dict):
+            self.name, self.args = name, args
+
+    # ------------------------------------------------------------------
+    def __init__(
+        self,
+        model_name: str = "microsoft/Phi-4-mini-reasoning",
+        *,
+        device: str | None = None,      # "cuda", "mps", "cpu", or None→auto
+        dtype:  str       = "auto",     # "float16", "bfloat16", "auto", …
+        per_min_limit: int = 30,
+        **opts,                         # forwarded to SimpleModel
+    ) -> None:
+        super().__init__(model_name, per_min_limit, **opts)
+
+        if AutoTokenizer is None:
+            raise ImportError("`transformers` not installed – pip install transformers")
+
+        self.tokenizer: PreTrainedTokenizerBase = AutoTokenizer.from_pretrained(
+            model_name, padding_side="left"
+        )
+        torch_dtype = getattr(torch, dtype) if dtype != "auto" and hasattr(torch, dtype) else None
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=torch_dtype,
+            device_map=device or "auto",
+        )
+        self.model.eval()
+
+    # ======================= abstract-hook implementations ===================
+    # 1) tool schema helper ---------------------------------------------------
+    def _create_tool_object(self, name: str, description: str, parameters: dict) -> dict:
+        return {
+            "type": "function",
+            "function": {
+                "name":        name,
+                "description": description,
+                "parameters": {
+                    "type":       "object",
+                    "properties": parameters,
+                    "required":   list(parameters.keys()),
+                },
+            },
+        }
+
+    # 2) main generation routine ---------------------------------------------
+    def _generate(
+        self,
+        *,
+        messages:      List[Dict[str, str]] | None = None,
+        user_prompt:   str | None           = None,
+        system_prompt: str | None           = None,
+        tools:         List[dict] | None    = None,
+        max_new_tokens: int = 256,
+        temperature:    float | None        = None,
+        **gen_kw,
+    ):
+        # ---- normalise to a messages list --------------------------------
+        if messages is None:
+            if user_prompt is None:
+                raise ValueError("HFTransformersModel needs `user_prompt` or `messages`.")
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": user_prompt})
+
+        # ---- inject JSON schema when native_tool=True --------------------
+        schema_for_template = tools if (self.native_tool and tools) else None
+
+        enc_dict = self.tokenizer.apply_chat_template(
+            messages,
+            tools=schema_for_template,
+            add_generation_prompt=True,
+            return_dict=True,        # ⇐ ensures we get a **mapping**
+            return_tensors="pt",
+        ).to(self.model.device)
+
+        # enc_dict is now a mapping: {"input_ids": Tensor, "attention_mask": Tensor}
+        # with torch.no_grad():
+        with torch.inference_mode():
+            gen_ids = self.model.generate(
+                **enc_dict,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                # **gen_kw,
+            )
+
+        reply = self.tokenizer.decode(
+            gen_ids[0][enc_dict["input_ids"].shape[1] :],
+            skip_special_tokens=False,
+        )
+
+        # wrap in a tiny object understood by apply_tool/print_response
+        # return type("HFResp", (), {"text": reply})()
+        return reply
+
+    # 3) tool-call iterator ---------------------------------------------------
+    def _iter_tool_calls(self, response) -> List[Tuple[str, Dict[str, Any], Any]]:
+        # text = getattr(response, "text", str(response))
+        text = response
+        calls: List[Tuple[str, Dict[str, Any], Any]] = []
+
+        if self.native_tool:
+            # a) native tool-calling: model emits <tool_call>{…}</tool_call>
+            for m in _re.finditer(r"<tool_call>(.*?)</tool_call>", text, flags=_re.S):
+                try:
+                    obj = _json.loads(m.group(1))
+                    if {"name", "arguments"} <= obj.keys():
+                        calls.append((obj["name"], obj["arguments"], m.group(0)))
+                except Exception:
+                    pass
+        else:
+                # pull the text between the first and last bracket
+                # ASSUMES the model outputs a SINGLE tool call
+                response_message = self.response_text(response)
+                first = response_message.index("{")
+                last  = response_message.rindex("}") + 1
+                tool_json = json.loads(response_message[first:last])
+                # Extract function and arguments from json
+                function_name = tool_json.get("function")
+                args = tool_json.get("arguments")
+                if self.verbose:
+                    print(function_name)
+                    pprint.pp(args)
+                    pprint.pp(response)
+                # Extract calls using regexp
+                # Extract name and arguments from call
+                # Return in appropriate format
+                # print("Error: Non-native tool calling not yet implemented")
+                calls = [(function_name,args,response)]            # # b) fallback: any bare JSON with those keys
+            # if not calls:
+            #     for m in _re.finditer(r"\\{[^\\}]*\\}", text):
+            #         try:
+            #             obj = _json.loads(m.group(0))
+            #             if {"name", "arguments"} <= obj.keys():
+            #                 calls.append((obj["name"], obj["arguments"], m.group(0)))
+            #         except Exception:
+            #             continue
+        return calls
+
+    # 4) extract human-readable answer ---------------------------------------
+    def response_text(self, response) -> str:
+        # txt = getattr(response, "text", str(response))
+        # return _re.sub(r"<tool_call>[\\s\\S]*?</tool_call>", "", response).strip()
+        clean =   response.replace("<|end|>", "").strip()
+        return clean
 
 
 ###############################################################################

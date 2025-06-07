@@ -2,22 +2,22 @@
 # Install google AI - pip install google-genai
 
 from google.genai import types
-from model import GeminiModel, HTTPChatModel
+from model import GeminiModel, HTTPChatModel, HFTransformersModel
 from model import Prompt
 
 import pprint 
 
-# Gemma models, google API: 
-# NO native tool use
-# NO system prompt :(
-freemodel = GeminiModel(
-    "gemma-3-27b-it",
-    # "gemma-3n-e4b-it",
-    30,    
-    native_tool = False,
-    verbose = False,
-    allow_system_prompt = False,
-)
+# # Gemma models, google API: 
+# # NO native tool use
+# # NO system prompt :(
+# freemodel = GeminiModel(
+#     "gemma-3-27b-it",
+#     # "gemma-3n-e4b-it",
+#     30,    
+#     native_tool = False,
+#     verbose = False,
+#     allow_system_prompt = False,
+# )
 
 # Gemini models, google API ONLY
 # compare native/non-native tool use
@@ -30,18 +30,27 @@ freemodel = GeminiModel(
 
 # # Any OpenAPI compatible provider
 # freemodel = HTTPChatModel(
-#     # "mistral-small:24b-instruct-2501-q4_K_M"
-#     "gemma3:12b", 
+#   # Models:
+#   # WITH native Tools
+#     "mistral-small:24b-instruct-2501-q4_K_M",
+#   # NO native tools
+#     # "gemma3:12b", 
+#   # Other Flags
 #     multimodal=True, 
-#     native_tool=False, 
-#     verbose=False)
+#     native_tool=True, 
+#     verbose=False,
+# )
 
+freemodel = HFTransformersModel(
+  "microsoft/Phi-4-mini-instruct",
+  native_tool=False,
+)
 
 """## Model Wrapper: Example Usage"""
 
-test_prompt = False
+test_prompt = True
 test_tools = True
-test_multimodal = False
+test_multimodal = True
 
 if test_prompt:
   print("============== PROMPT TEST 1 ==============")
@@ -63,7 +72,7 @@ if test_prompt:
 
   print("============== PROMPT TEST 2 ==============")
 
-  print("____________________")
+  print("--------------------------")
   from model import Prompt
 
   spec = {
@@ -129,24 +138,32 @@ if test_tools:
         print(call)
     else: 
       print("WARNING: No tool calls")
-      freemodel.print_response(response)
+      print(freemodel.print_response(response))
     # freemodel.print_response(response)
     # print('\nModel response:\n',freemodel.response_text(response))
     ## Observe *RESULT* of calling the tool functions
     # print('\nTool call result:' , freemodel.apply_tool(response))
+
+    # print(response)
     print("--------------------------")
 
 if test_multimodal:
   print("============== MULTIMODAL TESTS ==============")
-  # download first
+  
+  print("Test 1: local image file")
   from pathlib import Path
   import io, requests
   from PIL import Image
 
-  img_path = Path("test_flower.jpg")
+  img_path = Path("random_image.jpg")
   if not img_path.exists():
+      # Downloaded from picsum.photos
+      # the `laurem ipsum` of photos
+      # single number after slash provides 
+      #   square image of that size
       jpg = requests.get("https://picsum.photos/256").content
       Image.open(io.BytesIO(jpg)).save(img_path)
+      print("Saving new image: `random_image.jpg`")
   response = freemodel.generate_content(
       user_prompt="Describe the image in one sentence.",
       attachment_names=[str(img_path)],
@@ -154,9 +171,12 @@ if test_multimodal:
   print(freemodel.response_text(response))
 
   # Hosted Image
+  print("Test 2: remote image file")
   response=freemodel.generate_content( user_prompt = "What is the color of this flower?", attachment_names = ["https://hips.hearstapps.com/hmg-prod/images/wisteria-in-bloom-royalty-free-image-1653423554.jpg"])
   print(freemodel.response_text(response))
+
   # Online Video
+  print("Test 3: remote video file")
   response=freemodel.generate_content( user_prompt = "What is the second joint in this video?", attachment_names =["https://www.youtube.com/watch?v=2bS_N6_QQos"])
   print(freemodel.response_text(response))
 
