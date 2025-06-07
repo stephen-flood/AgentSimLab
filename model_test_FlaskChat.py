@@ -3,7 +3,12 @@ from model import GeminiModel, HTTPChatModel, RateLimitTracker
 # Google free, NO native function calling
 # freemodel = GeminiModel("gemma-3-27b-it", 25, 1000)
 #
-freemodel = GeminiModel("gemini-2.0-flash-lite", 25, 1000)
+freemodel = GeminiModel(
+    "gemini-2.0-flash-lite", 
+    25, 
+    1000, 
+    verbose=False,
+    )
 # freemodel= GeminiModel("gemini-2.0-flash", 15, 1000)
 # freemodel= GeminiModel("gemini-2.5-flash-preview-04-17", 10, 1000)
 # freemodel= GeminiModel("gemini-2.5-flash-preview-04-17", 8, 1000)
@@ -23,7 +28,7 @@ app = Flask(__name__)
 PAGE = """
 <!doctype html>
 <head>
-  <title>SimpleCodeAgent</title>
+  <title>Simple AI Chat</title>
   <script id="MathJax-script"
         async
         src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
@@ -50,7 +55,7 @@ PAGE = """
   </style>
 </head>
 <body>
-  <h1>Coding Agent</h1>
+  <h1>LLM Conversation</h1>
 
   <form method="post">
     <input name="user_input" type="text" placeholder="Type your prompt here" autofocus>
@@ -85,22 +90,28 @@ def route_index():
     global history
     user_input = request.form.get("user_input") if request.method == "POST" else None
     # print("Input: ", user_input)
-    response = freemodel.generate_content(user_prompt = user_input)
-    # print("Response:" , response)
-    response_text = freemodel.response_text(response)
-    response_html = md_to_safe_html(response_text)
-    history.append(
-        {
-            "role" : "user",
-            "content" : user_input
-        }
-    )
-    history.append(
-        {
-            "role" : "assistant",
-            "content" : response_html
-        }
-    )
+
+    if request.method == "POST":
+      response = freemodel.generate_content(
+          user_prompt = user_input, 
+          history=history)
+      # print("Response:" , response)
+      response_text = freemodel.response_text(response)
+      response_html = md_to_safe_html(response_text)
+      history.append(
+          {
+              "role" : "user",
+              "content" : user_input
+          }
+      )
+      history.append(
+          {
+              "role" : "assistant",
+              "content" : response_html
+          }
+      )
+    else: 
+        user_input = response_html = None
     return render_template_string(PAGE, 
                                   user_input = user_input,
                                   clean_output = response_html,

@@ -113,16 +113,16 @@ class SimpleModel(ABC):
                          *, # args below will be displayed as hints
                          user_prompt : str |  None = None,
                          system_prompt : str |  None = None,
-                        #  history : List[dict] |  None = None,
-                          **kwargs):
+                         history : List[dict] |  None = None,
+                         **kwargs):
 
         # append expected args to kwargs for processing
         if user_prompt:         
             kwargs["user_prompt"] = user_prompt
         if system_prompt:
             kwargs["system_prompt"] = system_prompt
-        # if history:
-        #     kwargs["history"] = history
+        if history:
+            kwargs["history"] = history
 
         self.rate.log_query()
         wait = self.rate.time_to_wait()
@@ -187,35 +187,37 @@ class SimpleModel(ABC):
             content = None
 
         # Update history
-        # if history is not None:
-        #     if system_prompt:
-        #         history.append(
-        #             {
-        #                 "role" : "system",
-        #                 "content" : kwargs["system_prompt"]
-        #             }
-        #         )
-        #     if user_prompt:
-        #         history.append(
-        #             {
-        #                 "role" : "user",
-        #                 "content" : kwargs["user_prompt"]
-        #             }
-        #         )
-        #     if self._iter_tool_calls(content) is not None:
-        #         history.append(
-        #             {
-        #                 "role" : "assistant",
-        #                 "content" : str(self._iter_tool_calls(content))
-        #             }
-        #         )
-        #     else:
-        #         history.append(
-        #             {
-        #                 "role" : "assistant",
-        #                 "content" : self.response_text(content)
-        #             }
-        #         )
+        if history is not None:
+            if system_prompt:
+                history.append(
+                    {
+                        "role" : "system",
+                        "content" : kwargs["system_prompt"]
+                    }
+                )
+            if user_prompt:
+                history.append(
+                    {
+                        "role" : "user",
+                        "content" : kwargs["user_prompt"]
+                    }
+                )
+            tool_calls = self._iter_tool_calls(content)
+            if tool_calls is not None:
+                for call in tool_calls:
+                    history.append(
+                            {
+                                "role" : "function",
+                                "content" : call[2]
+                            }
+                    )
+            else:
+                history.append(
+                    {
+                        "role" : "assistant",
+                        "content" : self.response_text(content)
+                    }
+                )
 
         return content
 
@@ -345,7 +347,8 @@ class GeminiModel(SimpleModel):
         self,
         *, # Parameters below "*," are optional because they have default values.  Otherwise, they're required
         user_prompt: str | None = None,
-        contents: List[gtypes.Content] | None = None,
+        history: List[dict] | None = None,
+        # contents: List[gtypes.Content] | None = None,
         tools:    List[Any]           | None = None,
         attachment_names: List[str]   | None = None,
         system_prompt:    str         | None = None,
@@ -370,36 +373,44 @@ class GeminiModel(SimpleModel):
         # If the caller handed us a ready-made `contents` list, respect it.
         # Otherwise build one from the convenience kwargs.
         # ------------------------------------------------------------------
-        if contents is None:
-            contents_list: List[gtypes.Content | gtypes.Part] = []
-            attachment_names = attachment_names or []
+        contents_list = []
+        attachment_names = attachment_names or []
 
-            # 1. binary/file/media parts
-            for ref in attachment_names:
-                contents_list.append(self._part_from_ref(ref))
-
-            # 2. optional system instruction
-            if system_prompt:
+        # 0. Read in previous history
+        if history:
+            for msg in history:
                 contents_list.append(
                     gtypes.Content(
-                        role="system",
-                        parts=[gtypes.Part.from_text(text=system_prompt)],
+                        role = msg["role"],
+                        parts = [gtypes.Part.from_text(text=msg["content"])]
                     )
                 )
 
-            # 3. primary user prompt (required in this code-path)
-            if user_prompt is None:
-                raise ValueError(
-                    "GeminiModel.generate_content needs `user_prompt` "
-                    "when `contents` is omitted."
-                )
+        # 1. binary/file/media parts
+        for ref in attachment_names:
+            contents_list.append(self._part_from_ref(ref))
+
+        # 2. optional system instruction
+        if system_prompt:
             contents_list.append(
                 gtypes.Content(
-                    role="user",
-                    parts=[gtypes.Part.from_text(text=user_prompt)],
+                    role="system",
+                    parts=[gtypes.Part.from_text(text=system_prompt)],
                 )
             )
-            contents = contents_list   # now fully assembled
+
+        # 3. primary user prompt (required in this code-path)
+        if user_prompt is None:
+            raise ValueError(
+                "GeminiModel.generate_content needs `user_prompt` "
+                "when `contents` is omitted."
+            )
+        contents_list.append(
+            gtypes.Content(
+                role="user",
+                parts=[gtypes.Part.from_text(text=user_prompt)],
+            )
+        )
 
 
         if "native_tool" in kwargs:
@@ -416,10 +427,13 @@ class GeminiModel(SimpleModel):
             cfg = gtypes.GenerateContentConfig(
                 response_mime_type="text/plain",
             )
-            
+
+        if self.verbose:
+            pprint.pp(contents_list)
+
         return self.client.models.generate_content(
             model=self.model_name,
-            contents=contents,
+            contents=contents_list,
             config=cfg,
         )
     
@@ -460,7 +474,7 @@ class GeminiModel(SimpleModel):
             return gtypes.Part.from_bytes(data=requests.get(ref).content, mime_type=mime)
         mime, _ = mimetypes.guess_type(ref)
         with open(ref, "rb") as fh:
-            return gtypes.Part.from_bytes(data=fh.read(), mime_type=mime)
+            return gtypes.Part.from_bytes(data=fh.read(), mime_type=str(mime) )
 
 ###############################################################################
 # HTTP based access 
@@ -529,12 +543,11 @@ class HTTPChatModel(SimpleModel):
     def _generate(
         self,
         *,
-        # ① legacy chat/completion entry-point --------------------------
-        messages: List[Message] | None = None,
-        # ② convenience keywords ---------------------------------------
+        # convenience keywords ---------------------------------------
         user_prompt:     str | None            = None,
-        attachment_names: List[str] | None     = None,
         system_prompt:    str | None           = None,
+        history: List[dict] | None             = None,
+        attachment_names: List[str] | None     = None,
         # ---------------------------------------------------------------
         stream: bool = False,
         **params: Any,
@@ -546,7 +559,8 @@ class HTTPChatModel(SimpleModel):
             "stream":   stream,
         }
 
-        tools_used = params["tools"]
+        if "tools" in params:
+            tools_used = params["tools"]
         if self.verbose: print(tools_used)
         # Handle native tools
         # Non-native tool calling already handled by generate_content in SimpleModel 
@@ -556,32 +570,28 @@ class HTTPChatModel(SimpleModel):
             ]
 
         # -------- assemble messages list if caller used shortcuts -----
-        if messages is None:
-            if user_prompt is None:
-                raise ValueError(
-                    "HTTPChatModel.generate_content needs `user_prompt` "
-                    "when `messages` is omitted."
-                )
+        if user_prompt is None:
+            raise ValueError(
+                "HTTPChatModel.generate_content needs `user_prompt` "
+                "when `messages` is omitted."
+            )
 
-            messages = []
+        messages = []
 
-            if system_prompt:
-                messages.append({"role": "system", "content": system_prompt})
+        if history:
+            messages.extend(history)
 
-            if self.multimodal and attachment_names:
-                parts = [{"type": "text", "text": user_prompt}]
-                for ref in attachment_names:
-                    parts.append(self._part_from_ref(ref))
-                messages.append({"role": "user", "content": parts})
-            else:
-                # Non multimodal models expect text content only (no parts)
-                messages.append({"role": "user", "content": user_prompt})
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
 
-        elif self.native_tool is False:
-            print("Warning: passing messages block does not (yet) support non-native tool calling.")
-            #TODO: inspect passed messages for existing system prompt.  
-            #   - append the tool_prompt if it exists 
-            #   - create a new one otherwise
+        if self.multimodal and attachment_names:
+            parts = [{"type": "text", "text": user_prompt}]
+            for ref in attachment_names:
+                parts.append(self._part_from_ref(ref))
+            messages.append({"role": "user", "content": parts})
+        else:
+            # Non multimodal models expect text content only (no parts)
+            messages.append({"role": "user", "content": user_prompt})
 
         payload["messages"] = messages
 
@@ -805,22 +815,25 @@ class HFTransformersModel(SimpleModel):
     def _generate(
         self,
         *,
-        messages:      List[Dict[str, str]] | None = None,
         user_prompt:   str | None           = None,
         system_prompt: str | None           = None,
+        history:       str | None           = None,
         tools:         List[dict] | None    = None,
         max_new_tokens: int = 256,
         temperature:    float | None        = None,
         **gen_kw,
     ):
         # ---- normalise to a messages list --------------------------------
-        if messages is None:
-            if user_prompt is None:
-                raise ValueError("HFTransformersModel needs `user_prompt` or `messages`.")
-            messages = []
-            if system_prompt:
-                messages.append({"role": "system", "content": system_prompt})
-            messages.append({"role": "user", "content": user_prompt})
+        if user_prompt is None:
+            raise ValueError("HFTransformersModel needs `user_prompt`.")
+        messages = []
+
+        if history:
+            messages.extend(history)
+
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": user_prompt})
 
         # ---- inject JSON schema when native_tool=True --------------------
         schema_for_template = tools if (self.native_tool and tools) else None
@@ -853,10 +866,10 @@ class HFTransformersModel(SimpleModel):
         return reply
 
     # 3) tool-call iterator ---------------------------------------------------
-    def _iter_tool_calls(self, response) -> List[Tuple[str, Dict[str, Any], Any]]:
+    def _iter_tool_calls(self, response) -> List[Tuple[str, Dict[str, Any], Any]] | None:
         # text = getattr(response, "text", str(response))
         text = response
-        calls: List[Tuple[str, Dict[str, Any], Any]] = []
+        calls: List[Tuple[str, Dict[str, Any], Any]]  = []
 
         if self.native_tool:
             # a) native tool-calling: model emits <tool_call>{…}</tool_call>
@@ -866,41 +879,43 @@ class HFTransformersModel(SimpleModel):
                     if {"name", "arguments"} <= obj.keys():
                         calls.append((obj["name"], obj["arguments"], m.group(0)))
                 except Exception:
-                    pass
+                    return None
         else:
-                # pull the text between the first and last bracket
-                # ASSUMES the model outputs a SINGLE tool call
-                response_message = self.response_text(response)
-                first = response_message.index("{")
-                last  = response_message.rindex("}") + 1
-                tool_json = json.loads(response_message[first:last])
-                # Extract function and arguments from json
-                function_name = tool_json.get("function")
-                args = tool_json.get("arguments")
-                if self.verbose:
-                    print(function_name)
-                    pprint.pp(args)
-                    pprint.pp(response)
-                # Extract calls using regexp
-                # Extract name and arguments from call
-                # Return in appropriate format
-                # print("Error: Non-native tool calling not yet implemented")
-                calls = [(function_name,args,response)]            # # b) fallback: any bare JSON with those keys
-            # if not calls:
-            #     for m in _re.finditer(r"\\{[^\\}]*\\}", text):
-            #         try:
-            #             obj = _json.loads(m.group(0))
-            #             if {"name", "arguments"} <= obj.keys():
-            #                 calls.append((obj["name"], obj["arguments"], m.group(0)))
-            #         except Exception:
-            #             continue
+                try:
+                    # pull the text between the first and last bracket
+                    # ASSUMES the model outputs a SINGLE tool call
+                    response_message = self.response_text(response)
+                    first = response_message.index("{")
+                    last  = response_message.rindex("}") + 1
+                    tool_json = json.loads(response_message[first:last])
+                    # Extract function and arguments from json
+                    function_name = tool_json.get("function")
+                    args = tool_json.get("arguments")
+                    if self.verbose:
+                        print(function_name)
+                        pprint.pp(args)
+                        pprint.pp(response)
+                    # Extract calls using regexp
+                    # Extract name and arguments from call
+                    # Return in appropriate format
+                    # print("Error: Non-native tool calling not yet implemented")
+                    calls = [(function_name,args,response)]            # # b) fallback: any bare JSON with those keys
+                # if not calls:
+                #     for m in _re.finditer(r"\\{[^\\}]*\\}", text):
+                #         try:
+                #             obj = _json.loads(m.group(0))
+                #             if {"name", "arguments"} <= obj.keys():
+                #                 calls.append((obj["name"], obj["arguments"], m.group(0)))
+                #         except Exception:
+                #             continue
+                except: 
+                    return None
         return calls
 
     # 4) extract human-readable answer ---------------------------------------
     def response_text(self, response) -> str:
-        # txt = getattr(response, "text", str(response))
-        # return _re.sub(r"<tool_call>[\\s\\S]*?</tool_call>", "", response).strip()
-        clean =   response.replace("<|end|>", "").strip()
+        # strip out everything formatted like a special token <| ... |>
+        clean = _re.sub(r'<\|.*?\|>', '', response)
         return clean
 
 

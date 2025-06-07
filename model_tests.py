@@ -19,30 +19,32 @@ import pprint
 #     allow_system_prompt = False,
 # )
 
-# Gemini models, google API ONLY
-# compare native/non-native tool use
+# # Gemini models, google API ONLY
+# # compare native/non-native tool use
 # freemodel = GeminiModel(
 #     "gemini-2.0-flash-lite", 
 #     30,
 #     native_tool = True,
-#     verbose=False
+#     verbose=False,
 #     )
 
 # # Any OpenAPI compatible provider
 # freemodel = HTTPChatModel(
-#   # Models:
-#   # WITH native Tools
-#     "mistral-small:24b-instruct-2501-q4_K_M",
-#   # NO native tools
-#     # "gemma3:12b", 
-#   # Other Flags
+# # # Models:
+#   ## WITH native Tools
+#     # "mistral-small:24b-instruct-2501-q4_K_M",
+#     # native_tool=True, 
+#   ## NO native tools
+#     "gemma3:12b", 
+#     native_tool=False, 
+#   ## Other Flags
 #     multimodal=True, 
-#     native_tool=True, 
 #     verbose=False,
 # )
 
 freemodel = HFTransformersModel(
-  "microsoft/Phi-4-mini-instruct",
+  # "microsoft/Phi-4-mini-instruct",
+  "allenai/OLMo-2-0425-1B-Instruct",
   native_tool=False,
 )
 
@@ -51,8 +53,9 @@ freemodel = HFTransformersModel(
 test_prompt = True
 test_tools = True
 test_multimodal = True
+test_history = True
 
-if test_prompt:
+if test_prompt :
   print("============== PROMPT TEST 1 ==============")
 
   sample_prompt = Prompt(persona = "You are an angry, defensive employee.",
@@ -180,3 +183,15 @@ if test_multimodal:
   response=freemodel.generate_content( user_prompt = "What is the second joint in this video?", attachment_names =["https://www.youtube.com/watch?v=2bS_N6_QQos"])
   print(freemodel.response_text(response))
 
+
+if test_history:
+  history = [
+      {"role": "user",      "content": "Who won the 2022 World Cup?"},
+      {"role": "assistant", "content": "Argentina lifted the trophy."},
+  ]
+
+  resp = freemodel.generate_content(
+      user_prompt="And who scored the winning goal?",
+      history=history
+  )
+  print(freemodel.response_text(resp))
