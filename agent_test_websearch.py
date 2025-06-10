@@ -1,5 +1,5 @@
 from agent import SimpleAgent, SimpleMemory, SelfCompressingMemory
-from model import GeminiModel, HTTPChatModel, RateLimitTracker
+from model import GeminiModel, HTTPChatModel, RateLimitTracker, HFTransformersModel
 import time
 
 # Google free, NO native function calling
@@ -15,17 +15,35 @@ import time
 # - gemma3:27b
 # - gemma3:12b
 # freemodel = HTTPChatModel("gemma3:24b", native_tool=False)
-freemodel = HTTPChatModel("gemma3:12b", native_tool=False)
+# freemodel = HTTPChatModel("gemma3:12b", native_tool=False)
 # freemodel = HTTPChatModel("mistral-small:24b-instruct-2501-q4_K_M")
 
+
+freemodel = HFTransformersModel( "allenai/OLMo-2-0425-1B-Instruct", native_tool=False, )
+
+
 # agent_mem = SimpleMemory()
-agent_mem = SelfCompressingMemory(100000,freemodel)
+# agent_mem = SelfCompressingMemory(100000,freemodel)
+agent_mem = SelfCompressingMemory(10000,freemodel)
 
 # Initially, copied from agent.py 
 # Eventually: modify by hand or have LLM explore prompts agentically
-default_plan_instruct_template = "First, identify what {self.name} would do.  Then make a very short plan to achieve those goals.  Find a SMALL NUMBER of concrete steps that can be taken.  Take available tools into account in your planning, but DO NOT do any tool calls."
-default_action_instruct_template = "What would {self.name} do? "
-default_speech_instruct_template = "What would {self.name} say?"
+default_plan_instruct_template = \
+"""
+First, identify what {self.name} would do.  Then make a very short plan to achieve those goals.  
+Find a SMALL NUMBER of concrete steps that can be taken.  
+Take available tools into account in your planning, but DO NOT do any tool calls.
+"""
+###
+default_action_instruct_template = \
+"""
+What would {self.name} do? 
+"""
+###
+default_speech_instruct_template = \
+"""
+What would {self.name} say?
+"""
 
 # Initialize agent
 agent = SimpleAgent(

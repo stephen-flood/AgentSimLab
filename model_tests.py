@@ -29,24 +29,24 @@ import pprint
 #     )
 
 # # Any OpenAPI compatible provider
-# freemodel = HTTPChatModel(
-# # # Models:
-#   ## WITH native Tools
-#     # "mistral-small:24b-instruct-2501-q4_K_M",
-#     # native_tool=True, 
-#   ## NO native tools
-#     "gemma3:12b", 
-#     native_tool=False, 
-#   ## Other Flags
-#     multimodal=True, 
-#     verbose=False,
-# )
-
-freemodel = HFTransformersModel(
-  # "microsoft/Phi-4-mini-instruct",
-  "allenai/OLMo-2-0425-1B-Instruct",
-  native_tool=False,
+freemodel = HTTPChatModel(
+# # Models:
+  ## WITH native Tools
+    # "mistral-small:24b-instruct-2501-q4_K_M",
+    # native_tool=True, 
+  ## NO native tools
+    "gemma3:12b", 
+    native_tool=False, 
+  ## Other Flags
+    multimodal=True, 
+    verbose=False,
 )
+
+# freemodel = HFTransformersModel(
+#   # "microsoft/Phi-4-mini-instruct",
+#   "allenai/OLMo-2-0425-1B-Instruct",
+#   native_tool=False,
+# )
 
 """## Model Wrapper: Example Usage"""
 
@@ -185,6 +185,7 @@ if test_multimodal:
 
 
 if test_history:
+  print("============== HISTORY TESTS ==============")
   history = [
       {"role": "user",      "content": "Who won the 2022 World Cup?"},
       {"role": "assistant", "content": "Argentina lifted the trophy."},

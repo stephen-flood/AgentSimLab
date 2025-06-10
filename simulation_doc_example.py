@@ -1,13 +1,18 @@
-from model  import GeminiModel, HTTPChatModel
+from model  import GeminiModel, HTTPChatModel, HFTransformersModel
 from world  import World
 from agent  import SimpleAgent, SimpleModel, SelfCompressingMemory
 
 # 1️⃣  Create the shared language model
+## Google API
 # llm = GeminiModel("gemini-2.0-flash-lite", 25, 1000)
 # llm = GeminiModel("gemini-2.0-flash", 15, 1000)
 # llm = GeminiModel("gemini-2.5-flash-preview-04-17", 10, 1000)
+## Ollama
 # llm = HTTPChatModel("mistral-small:24b-instruct-2501-q4_K_M")
 llm = HTTPChatModel("gemma3:12b", native_tool=False)
+## HF transformers
+# llm = HFTransformersModel( "allenai/OLMo-2-0425-1B-Instruct", native_tool=False, )
+
 
 # 2️⃣  Describe the physical space
 rooms = ["kitchen", "living", "garden"]

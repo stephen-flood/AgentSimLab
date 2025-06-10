@@ -44,8 +44,11 @@ try:
   from google.colab import userdata
   os.environ["GEMINI_API_KEY"] = userdata.get("GEMINI_API_KEY")
 except:
-  with open("gemini.api_key") as file:
-    os.environ["GEMINI_API_KEY"] = file.read()
+  try:
+    with open("gemini.api_key") as file:
+        os.environ["GEMINI_API_KEY"] = file.read()
+  except:
+    pass
 
 ###############################################################################
 # Utility
@@ -160,10 +163,6 @@ class SimpleModel(ABC):
 
             if self.verbose: print(kwargs["system_prompt"])
         
-        if self.verbose:
-            print("kwargs")
-            pprint.pp(kwargs)
-
 
         # Handle models that do not allow system prompts
         if not self.allow_system_prompt and "system_prompt" in kwargs:
@@ -177,6 +176,10 @@ class SimpleModel(ABC):
                                     + "\n END USER PROMPT"
         if not self.allow_system_prompt and "messages" in kwargs:
             print("WARNING: not fixing system prompts in messages list")
+
+        if self.verbose:
+            print("kwargs")
+            pprint.pp(kwargs)
 
         # Call subclass's version of llm query
         try:
@@ -492,7 +495,7 @@ class HTTPChatModel(SimpleModel):
     def __init__(
         self,
         model_name: str,
-        base_url: str                    = "http://localhost:11434/v1",
+        base_url: str                    = "http://localhost:11434",
         api_key:   str | None            = None,
         *, # Parameters below "*," are optional because they have default values.  Otherwise, they're required
         native_tool : bool = True,
@@ -561,7 +564,8 @@ class HTTPChatModel(SimpleModel):
 
         if "tools" in params:
             tools_used = params["tools"]
-        if self.verbose: print(tools_used)
+            if self.verbose: print(tools_used)
+
         # Handle native tools
         # Non-native tool calling already handled by generate_content in SimpleModel 
         if "tools" in params and self.native_tool:
@@ -599,7 +603,7 @@ class HTTPChatModel(SimpleModel):
             print("LLM Query JSON:")
             pprint.pp(payload)
 
-        url  = f"{self.base_url}/chat/completions"
+        url  = f"{self.base_url}/v1/chat/completions"
         resp = self.session.post(url, json=payload, stream=stream)
         # resp.raise_for_status()
         resp = self.session.post(url, json=payload, stream=stream)
@@ -607,7 +611,7 @@ class HTTPChatModel(SimpleModel):
         try:
             resp.raise_for_status()
         except requests.HTTPError as e:
-            print("Ollama returned ERROR: ", resp.status_code)
+            print("Server returned ERROR: ", resp.status_code)
             try:
                 pprint.pp( json.loads(resp.text) )
             except:

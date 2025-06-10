@@ -1,5 +1,5 @@
 # main.py
-from model  import GeminiModel, HTTPChatModel
+from model  import GeminiModel, HTTPChatModel, HFTransformersModel
 from world  import World
 from agent  import SimpleAgent
 
@@ -19,6 +19,12 @@ from agent  import SimpleAgent
 # model = GeminiModel("gemini-2.5-flash-preview-04-17", 10, 1000)
 # model = HTTPChatModel("mistral-small:24b-instruct-2501-q4_K_M")
 model = HTTPChatModel("gemma3:12b", native_tool=False)
+
+# freemodel = HFTransformersModel(
+#   # "microsoft/Phi-4-mini-instruct",
+#   "allenai/OLMo-2-0425-1B-Instruct",
+#   native_tool=False,
+# )
 
 # ---------- 2.  Build the world ---------------------------------------------
 rooms   = ["living", "kitchen", "bathroom", "bedroom", "office", "garden"]

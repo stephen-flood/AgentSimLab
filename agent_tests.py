@@ -1,5 +1,5 @@
 from agent import SimpleAgent, SimpleMemory
-from model import GeminiModel, HTTPChatModel
+from model import GeminiModel, HTTPChatModel, HFTransformersModel
 
 """## Run a (simple) conversation between agents."""
 
@@ -25,6 +25,14 @@ freemodel = HTTPChatModel("gemma3:12b",
                         #   verbose=True,
                           verbose=False,
                           )
+
+
+# freemodel = HFTransformersModel(
+#   # "microsoft/Phi-4-mini-instruct",
+#   "allenai/OLMo-2-0425-1B-Instruct",
+#   native_tool=False,
+# )
+
 
 cust = SimpleAgent("Customer",
                    persona = "impatient, tech-savvy",
