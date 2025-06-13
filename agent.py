@@ -22,6 +22,9 @@ class SimpleMemory:
   def add_memory(self, text: str) -> None:
     self._store.append(text)
 
+  def clear_memory(self):
+    self._store = []
+
   def retrieve_recent_memories(self, n) -> List[str]:
     """
     Returns the most recent n memories.
@@ -64,10 +67,10 @@ class SelfCompressingMemory():
   def add_memory(self, text:str ):
     self.memories.append(text)
     self.length += len(text)
-
     # check if memory exceeds maximum size
     memory_yaml = str(self)
     if len(memory_yaml) > self.max_chars:
+      print(f"Memory size of {len(memory_yaml)} exceeds maximum of {self.max_chars} characters.  Compressing.")
       prompt = Prompt(
         persona = self.persona,
         max_chars = self.max_chars,
@@ -86,11 +89,18 @@ class SelfCompressingMemory():
 
       if self.length > self.max_chars:
         print("ERROR: memory compression FAILED")
-        if not self.verbose: print(compressed_memory) 
+        if self.verbose: 
+          print(compressed_memory) 
+          raise ValueError("Failure compressing memory.")
 
       if self.verbose:
         print("Compressing memories")
         print(compressed_memory)
+
+
+  def clear_memory(self):
+    self.memories = []
+    self.len = 0
 
   def __str__(self):
     if len(self.memories) == 0 :
@@ -102,6 +112,9 @@ class SelfCompressingMemory():
 class SimpleAgent:
   def __init__(self,
                name:str ,
+               plan_instruction_template:   str | None = None,
+               action_instruction_template: str | None = None,
+               speech_instruction_template: str | None = None,
                **kwargs,
                ) -> None:
     """
@@ -132,12 +145,18 @@ class SimpleAgent:
 
     self.verbose = False
 
+    if self.verbose: print(kwargs)
+
     default_plan_instruct_template = "First, identify what {self.name} would do.  Then make a very short plan to achieve those goals.  Find a SMALL NUMBER of concrete steps that can be taken.  Take available tools into account in your planning, but DO NOT do any tool calls."
-    self.plan_instruct_template = kwargs.pop("plan_instruct_template", default_plan_instruct_template)
     default_action_instruct_template = "What would {self.name} do? "
-    self.action_instruct_template = kwargs.pop("action_instruct_template", default_action_instruct_template)
     default_speech_instruct_template = "What would {self.name} say?"
-    self.speech_instruct_template = kwargs.pop("speech_instruct_template", default_speech_instruct_template)
+    # self.plan_instruct_template = kwargs.pop("plan_instruct_template", default_plan_instruct_template)
+    # self.action_instruct_template = kwargs.pop("action_instruct_template", default_action_instruct_template)
+    # self.speech_instruct_template = kwargs.pop("speech_instruct_template", default_speech_instruct_template)
+    self.plan_instruct_template   = plan_instruction_template   or default_plan_instruct_template
+    self.action_instruct_template = action_instruction_template or default_action_instruct_template
+    self.speech_instruct_template = speech_instruction_template or default_speech_instruct_template
+
 
     if "attribute_dictionary" in kwargs:
      self.attribute_dictionary = kwargs["attribute_dictionary"]
@@ -158,6 +177,12 @@ class SimpleAgent:
     else:
       raise ValueError(f"Error: {self.name} has no memory object to store {memory_string}")
 
+  def clear_memory(self):
+    if "memory" in self.attribute_dictionary:
+      self.attribute_dictionary["memory"].clear_memory()
+      return 
+    else:
+      raise ValueError(f"Error: {self.name} has no memory object to store {memory_string}")
 
   def generate_plan(self,**kwargs):    
     """

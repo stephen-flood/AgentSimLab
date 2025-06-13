@@ -5,8 +5,8 @@ import time
 # Google free, NO native function calling
 # freemodel = GeminiModel("gemma-3-27b-it", 25, 1000)
 #
-freemodel = GeminiModel("gemini-2.0-flash-lite", 25, 1000)
-# freemodel= GeminiModel("gemini-2.0-flash", 15, 1000)
+# freemodel = GeminiModel("gemini-2.0-flash-lite", 25, 1000)
+freemodel= GeminiModel("gemini-2.0-flash", 15, 1000)
 # freemodel= GeminiModel("gemini-2.5-flash-preview-04-17", 10, 1000)
 # freemodel= GeminiModel("gemini-2.5-flash-preview-04-17", 8, 1000)
 
@@ -23,8 +23,8 @@ freemodel = GeminiModel("gemini-2.0-flash-lite", 25, 1000)
 
 
 # agent_mem = SimpleMemory()
-# agent_mem = SelfCompressingMemory(100000,freemodel)
-agent_mem = SelfCompressingMemory(10000,freemodel)
+agent_mem = SelfCompressingMemory(100000,freemodel)
+# agent_mem = SelfCompressingMemory(10000,freemodel)
 
 # Initially, copied from agent.py 
 # Eventually: modify by hand or have LLM explore prompts agentically
@@ -33,6 +33,7 @@ default_plan_instruct_template = \
 First, identify what {self.name} would do.  Then make a very short plan to achieve those goals.  
 Find a SMALL NUMBER of concrete steps that can be taken.  
 Take available tools into account in your planning, but DO NOT do any tool calls.
+After the first stage, you should also DESCRIBE WHAT YOU LEARNED from previous observations.  THINK STEP BY STEP. 
 """
 ###
 default_action_instruct_template = \
@@ -47,7 +48,7 @@ What would {self.name} say?
 
 # Initialize agent
 agent = SimpleAgent(
-    "investigator",
+    "Explorer",
     plan_instruction_template = default_plan_instruct_template,
     action_instruction_template = default_action_instruct_template,
     speech_instruction_template = default_speech_instruct_template,
@@ -188,16 +189,16 @@ multimodal_query_tool = freemodel.register_tool(
         "query":    {"type" : "string", "description" : "The question I want to ask about the image or video."},
         "location": {"type" : "string", "description" : "The filename or url of the image or video I am interested in."},
     })
-mmqtest =  multimodal_query(
-    "https://hips.hearstapps.com/hmg-prod/images/wisteria-in-bloom-royalty-free-image-1653423554.jpg", 
-    "What is the color of this flower?", model=freemodel)
-print("Multimodal query\n",mmqtest)
+# mmqtest =  multimodal_query(
+#     "https://hips.hearstapps.com/hmg-prod/images/wisteria-in-bloom-royalty-free-image-1653423554.jpg", 
+#     "What is the color of this flower?", model=freemodel)
+# print("Multimodal query\n",mmqtest)
 
 
 keep_going  = True
 answer_string = ""
 def report_final_answer(answer : str, **kwargs):
-    global keep_going 
+    global keep_going , answer_string
     keep_going = False
     answer_string = answer
     print("Final answer:\n", answer_string)
@@ -212,12 +213,54 @@ final_answer_tool = freemodel.register_tool(
 tools = [visit_summary_tool,search_tool,final_answer_tool]
 # tools = [visit_bleach_tool,search_tool,final_answer_tool]
 
-agent.add_memory("My goal is to find the breed of the cat with the softest fur. \n I must complete this search in a limited number of stages.")
+import yaml
+default_log_name = "agent_test_idea_explorer_history.txt"
+def log_information( category: str , information : str, log_name : str = default_log_name):
+    try:
+        with open( log_name, "r") as file:
+            log = yaml.safe_load(file)
+    except:
+        log = []
+
+    log.append( { category: information } )
+
+    with open(log_name, "w") as file:
+        yaml.dump( log , file)
+
+# topic = "Agents and MCP (Model Context Protocol) servers."
+# topic = "What is involved in setting up a MCP (Model Context Protocol) server?  What are some problems that it can solve?  " \
+#     "What steps are required to set one up?  Include sample code for a MIMIAL Hello World MCP."
+topic = "I want to create my own VERY SIMPLE implementation of a coding agent (such as windsurf, codex, claude code).  " \
+    "I want the agent to be running inside its own docker image, and have access to its own forked copy of a github repository. " \
+    "I already have an agent library which handles the agent's internal memories, generation of plans/actions, and handles tool calls. " \
+    "Can you give me a minimial, very simple implementation in python?  "
+
+agent.set_attribute(
+    key = "Objective",
+    value =\
+f"""
+I am an avid learner.  
+My goal is to learn as much as I can about the following TOPIC.  
+I should prioritize authoritative sources like blogposts by major AI labs, 
+    and companies developing libraries for AI use.  
+TOPIC: {topic}
+APPROACH: I need to 
+1. Identify a new important topic.
+2. Perform in depth research into this topic. 
+3. Write a DETAILED final report (1 page) describing my discoveries. INCLUDE the report as your "Final Answer".
+"""
+)
+
+log_information("Starting Exploration", agent.description())
+log_information("Model type", freemodel.model_name )
+log_information("Tools", str(tools))
 
 count = 0
-max_count = 1
+# max_count = 1
 # max_count = 4
+# max_count = 10
 # max_count = 20
+max_count = 30
 # max_count = 5
 while keep_going and (count < max_count):
     count += 1
@@ -227,6 +270,7 @@ while keep_going and (count < max_count):
     plan = agent.generate_plan( details=f"I am on agent step {count}/{max_count}.  If this is the last step, I MUST call final_answer_tool with my final answer.  I CAN call final_answer_tool early, as soon as I have completed my research." ,  tools=tools)
     agent.add_memory("Plan: " + str(plan))
     print(plan)
+    log_information("Plan" , str(plan) )
 
     # (3) Supply tool objects during agent.generate_action
     act = agent.generate_action(
@@ -244,6 +288,7 @@ while keep_going and (count < max_count):
             # print(call)
             intended_action = f"Calling {call[0]} with arguments {call[1]}"
             agent.add_memory("Attempting Action: " + intended_action)
+            log_information("Attempting Action", str(intended_action) )
     # if act.function_calls is not None:
     #     print(act.function_calls)
     #     for call in act.function_calls:
@@ -251,10 +296,13 @@ while keep_going and (count < max_count):
     #         agent.add_memory("Attempting Action: " + intended_action)
     else:
         print(freemodel.response_text(act))
+        log_information("No Action.  LLM Text", freemodel.response_text(act))
 
     # (4) Use model.apply_tool.  Remember to supply all "hidden" arguments, not advertised to the model
     observe = freemodel.apply_tool(act, agent=agent)
     for result in observe:
         agent.add_memory("Observation: " + str(result[0]))
+        log_information("Observation" , str(result[0]))
 
 print(answer_string)
+log_information( "Final Answer" , answer_string )

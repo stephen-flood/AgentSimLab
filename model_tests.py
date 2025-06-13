@@ -166,7 +166,7 @@ if test_multimodal:
       #   square image of that size
       jpg = requests.get("https://picsum.photos/256").content
       Image.open(io.BytesIO(jpg)).save(img_path)
-      print("Saving new image: `random_image.jpg`")
+      print(f"Saving new image: {img_path}")
   response = freemodel.generate_content(
       user_prompt="Describe the image in one sentence.",
       attachment_names=[str(img_path)],

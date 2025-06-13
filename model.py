@@ -82,6 +82,14 @@ class RateLimitTracker:
         if n < self.per_min_limit // 2:
             return average_wait / 2
         return average_wait * 2
+    
+    def wait(self):
+        self.log_query()
+        wait = self.time_to_wait()
+        if wait > 0:
+            time.sleep(wait)
+        
+
 
 ###############################################################################
 # Abstract base
@@ -187,7 +195,7 @@ class SimpleModel(ABC):
         except Exception as e:
             print("Error generating content:" , e)
             pprint.pp(kwargs)
-            content = None
+            content = f"Error: {e}"
 
         # Update history
         if history is not None:
@@ -617,7 +625,7 @@ class HTTPChatModel(SimpleModel):
             except:
                 print( resp.text )
             # raise
-            return {}
+            return {"error" : e}
 
         if not stream:
             return resp.json()

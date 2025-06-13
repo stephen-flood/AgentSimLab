@@ -1,0 +1,383 @@
+model: gemini-2.5-flash-preview-04-17
+questions:
+- Level: '1'
+  file_name: ''
+  question: .rewsna eht sa "tfel" drow eht fo etisoppo eht etirw ,ecnetnes siht dnatsrednu
+    uoy fI
+  submitted_answer: right
+  task_id: 2d83110e-a098-4ebb-9987-066c06fa42d0
+tools_used:
+- !!python/object:google.genai.types.Tool
+  __dict__:
+    code_execution: null
+    function_declarations:
+    - !!python/object:google.genai.types.FunctionDeclaration
+      __dict__:
+        description: Visits the URL given by the user, and returns a summary of its
+          contents.
+        name: get_url_contents
+        parameters: !!python/object:google.genai.types.Schema
+          __dict__:
+            any_of: null
+            default: null
+            description: null
+            enum: null
+            example: null
+            format: null
+            items: null
+            max_items: null
+            max_length: null
+            max_properties: null
+            maximum: null
+            min_items: null
+            min_length: null
+            min_properties: null
+            minimum: null
+            nullable: null
+            pattern: null
+            properties:
+              url: !!python/object:google.genai.types.Schema
+                __dict__:
+                  any_of: null
+                  default: null
+                  description: The URL of a website that I need to get the contents
+                    of.
+                  enum: null
+                  example: null
+                  format: null
+                  items: null
+                  max_items: null
+                  max_length: null
+                  max_properties: null
+                  maximum: null
+                  min_items: null
+                  min_length: null
+                  min_properties: null
+                  minimum: null
+                  nullable: null
+                  pattern: null
+                  properties: null
+                  property_ordering: null
+                  required: null
+                  title: null
+                  type: !!python/object/apply:google.genai.types.Type
+                  - STRING
+                __pydantic_extra__: null
+                __pydantic_fields_set__: !!set
+                  description: null
+                  type: null
+                __pydantic_private__: null
+            property_ordering: null
+            required:
+            - url
+            title: null
+            type: !!python/object/apply:google.genai.types.Type
+            - OBJECT
+          __pydantic_extra__: null
+          __pydantic_fields_set__: !!set
+            properties: null
+            required: null
+            type: null
+          __pydantic_private__: null
+        response: null
+      __pydantic_extra__: null
+      __pydantic_fields_set__: !!set
+        description: null
+        name: null
+        parameters: null
+      __pydantic_private__: null
+    google_search: null
+    google_search_retrieval: null
+    retrieval: null
+  __pydantic_extra__: null
+  __pydantic_fields_set__: !!set
+    function_declarations: null
+  __pydantic_private__: null
+- !!python/object:google.genai.types.Tool
+  __dict__:
+    code_execution: null
+    function_declarations:
+    - !!python/object:google.genai.types.FunctionDeclaration
+      __dict__:
+        description: Retrieves a list of website URL's relevant to the search query.
+        name: web_search
+        parameters: !!python/object:google.genai.types.Schema
+          __dict__:
+            any_of: null
+            default: null
+            description: null
+            enum: null
+            example: null
+            format: null
+            items: null
+            max_items: null
+            max_length: null
+            max_properties: null
+            maximum: null
+            min_items: null
+            min_length: null
+            min_properties: null
+            minimum: null
+            nullable: null
+            pattern: null
+            properties:
+              search_query: !!python/object:google.genai.types.Schema
+                __dict__:
+                  any_of: null
+                  default: null
+                  description: A query for an online search.  This could be a question
+                    you want answered, a text fragment you want context for, the name
+                    of a file you are trying to find, or anything else.
+                  enum: null
+                  example: null
+                  format: null
+                  items: null
+                  max_items: null
+                  max_length: null
+                  max_properties: null
+                  maximum: null
+                  min_items: null
+                  min_length: null
+                  min_properties: null
+                  minimum: null
+                  nullable: null
+                  pattern: null
+                  properties: null
+                  property_ordering: null
+                  required: null
+                  title: null
+                  type: !!python/object/apply:google.genai.types.Type
+                  - STRING
+                __pydantic_extra__: null
+                __pydantic_fields_set__: !!set
+                  description: null
+                  type: null
+                __pydantic_private__: null
+            property_ordering: null
+            required:
+            - search_query
+            title: null
+            type: !!python/object/apply:google.genai.types.Type
+            - OBJECT
+          __pydantic_extra__: null
+          __pydantic_fields_set__: !!set
+            properties: null
+            required: null
+            type: null
+          __pydantic_private__: null
+        response: null
+      __pydantic_extra__: null
+      __pydantic_fields_set__: !!set
+        description: null
+        name: null
+        parameters: null
+      __pydantic_private__: null
+    google_search: null
+    google_search_retrieval: null
+    retrieval: null
+  __pydantic_extra__: null
+  __pydantic_fields_set__: !!set
+    function_declarations: null
+  __pydantic_private__: null
+- !!python/object:google.genai.types.Tool
+  __dict__:
+    code_execution: null
+    function_declarations:
+    - !!python/object:google.genai.types.FunctionDeclaration
+      __dict__:
+        description: Answers questions about multimodal inputs such as images and
+          videos.
+        name: multimodal_query
+        parameters: !!python/object:google.genai.types.Schema
+          __dict__:
+            any_of: null
+            default: null
+            description: null
+            enum: null
+            example: null
+            format: null
+            items: null
+            max_items: null
+            max_length: null
+            max_properties: null
+            maximum: null
+            min_items: null
+            min_length: null
+            min_properties: null
+            minimum: null
+            nullable: null
+            pattern: null
+            properties:
+              location: !!python/object:google.genai.types.Schema
+                __dict__:
+                  any_of: null
+                  default: null
+                  description: The filename or url of the image or video I am interested
+                    in.
+                  enum: null
+                  example: null
+                  format: null
+                  items: null
+                  max_items: null
+                  max_length: null
+                  max_properties: null
+                  maximum: null
+                  min_items: null
+                  min_length: null
+                  min_properties: null
+                  minimum: null
+                  nullable: null
+                  pattern: null
+                  properties: null
+                  property_ordering: null
+                  required: null
+                  title: null
+                  type: !!python/object/apply:google.genai.types.Type
+                  - STRING
+                __pydantic_extra__: null
+                __pydantic_fields_set__: !!set
+                  description: null
+                  type: null
+                __pydantic_private__: null
+              query: !!python/object:google.genai.types.Schema
+                __dict__:
+                  any_of: null
+                  default: null
+                  description: The question I want to ask about the image or video.
+                  enum: null
+                  example: null
+                  format: null
+                  items: null
+                  max_items: null
+                  max_length: null
+                  max_properties: null
+                  maximum: null
+                  min_items: null
+                  min_length: null
+                  min_properties: null
+                  minimum: null
+                  nullable: null
+                  pattern: null
+                  properties: null
+                  property_ordering: null
+                  required: null
+                  title: null
+                  type: !!python/object/apply:google.genai.types.Type
+                  - STRING
+                __pydantic_extra__: null
+                __pydantic_fields_set__: !!set
+                  description: null
+                  type: null
+                __pydantic_private__: null
+            property_ordering: null
+            required:
+            - query
+            - location
+            title: null
+            type: !!python/object/apply:google.genai.types.Type
+            - OBJECT
+          __pydantic_extra__: null
+          __pydantic_fields_set__: !!set
+            properties: null
+            required: null
+            type: null
+          __pydantic_private__: null
+        response: null
+      __pydantic_extra__: null
+      __pydantic_fields_set__: !!set
+        description: null
+        name: null
+        parameters: null
+      __pydantic_private__: null
+    google_search: null
+    google_search_retrieval: null
+    retrieval: null
+  __pydantic_extra__: null
+  __pydantic_fields_set__: !!set
+    function_declarations: null
+  __pydantic_private__: null
+- !!python/object:google.genai.types.Tool
+  __dict__:
+    code_execution: null
+    function_declarations:
+    - !!python/object:google.genai.types.FunctionDeclaration
+      __dict__:
+        description: Use this function to report your final answer, and exit the search
+          process.
+        name: report_final_answer
+        parameters: !!python/object:google.genai.types.Schema
+          __dict__:
+            any_of: null
+            default: null
+            description: null
+            enum: null
+            example: null
+            format: null
+            items: null
+            max_items: null
+            max_length: null
+            max_properties: null
+            maximum: null
+            min_items: null
+            min_length: null
+            min_properties: null
+            minimum: null
+            nullable: null
+            pattern: null
+            properties:
+              answer: !!python/object:google.genai.types.Schema
+                __dict__:
+                  any_of: null
+                  default: null
+                  description: Your FINAL ANSWER to the original question.
+                  enum: null
+                  example: null
+                  format: null
+                  items: null
+                  max_items: null
+                  max_length: null
+                  max_properties: null
+                  maximum: null
+                  min_items: null
+                  min_length: null
+                  min_properties: null
+                  minimum: null
+                  nullable: null
+                  pattern: null
+                  properties: null
+                  property_ordering: null
+                  required: null
+                  title: null
+                  type: !!python/object/apply:google.genai.types.Type
+                  - STRING
+                __pydantic_extra__: null
+                __pydantic_fields_set__: !!set
+                  description: null
+                  type: null
+                __pydantic_private__: null
+            property_ordering: null
+            required:
+            - answer
+            title: null
+            type: !!python/object/apply:google.genai.types.Type
+            - OBJECT
+          __pydantic_extra__: null
+          __pydantic_fields_set__: !!set
+            properties: null
+            required: null
+            type: null
+          __pydantic_private__: null
+        response: null
+      __pydantic_extra__: null
+      __pydantic_fields_set__: !!set
+        description: null
+        name: null
+        parameters: null
+      __pydantic_private__: null
+    google_search: null
+    google_search_retrieval: null
+    retrieval: null
+  __pydantic_extra__: null
+  __pydantic_fields_set__: !!set
+    function_declarations: null
+  __pydantic_private__: null
