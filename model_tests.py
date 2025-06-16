@@ -1,4 +1,3 @@
-
 # Install google AI - pip install google-genai
 
 from google.genai import types
@@ -19,28 +18,28 @@ import pprint
 #     allow_system_prompt = False,
 # )
 
-# # Gemini models, google API ONLY
-# # compare native/non-native tool use
-# freemodel = GeminiModel(
-#     "gemini-2.0-flash-lite", 
-#     30,
-#     native_tool = True,
-#     verbose=False,
-#     )
+# Gemini models, google API ONLY
+# compare native/non-native tool use
+freemodel = GeminiModel(
+    "gemini-2.0-flash-lite", 
+    30,
+    native_tool = True,
+    verbose=False,
+    )
 
 # # Any OpenAPI compatible provider
-freemodel = HTTPChatModel(
-# # Models:
-  ## WITH native Tools
-    # "mistral-small:24b-instruct-2501-q4_K_M",
-    # native_tool=True, 
-  ## NO native tools
-    "gemma3:12b", 
-    native_tool=False, 
-  ## Other Flags
-    multimodal=True, 
-    verbose=False,
-)
+# freemodel = HTTPChatModel(
+# # # Models:
+#   ## WITH native Tools
+#     # "mistral-small:24b-instruct-2501-q4_K_M",
+#     # native_tool=True, 
+#   ## NO native tools
+#     "gemma3:12b", 
+#     native_tool=False, 
+#   ## Other Flags
+#     multimodal=True, 
+#     verbose=False,
+# )
 
 # freemodel = HFTransformersModel(
 #   # "microsoft/Phi-4-mini-instruct",
@@ -50,10 +49,10 @@ freemodel = HTTPChatModel(
 
 """## Model Wrapper: Example Usage"""
 
-test_prompt = True
-test_tools = True
+test_prompt = False
+test_tools = False
 test_multimodal = True
-test_history = True
+test_history = False
 
 if test_prompt :
   print("============== PROMPT TEST 1 ==============")

@@ -13,7 +13,8 @@ def get_all_questions():
   return list_of_problems
 
 def get_url_from_name(file_name):
-  return 'https://agents-course-unit4-scoring.hf.space/files/' + file_name
+  task_id = file_name.split(".")[0]
+  return 'https://agents-course-unit4-scoring.hf.space/files/' + task_id
 
 import pprint
 # question_dictionary = get_all_questions()
@@ -132,14 +133,67 @@ search_tool = freemodel.register_tool(
 # Quick test
 # print("Testing Web Search.\n Search: 'cats'.  Response: ",web_search("Cats"))
 
+
+## Use Chromium web browser and playwright to interpret JavaScript before parsing 
+## Additional option: return only internal text of nodes
+from playwright.sync_api import sync_playwright
+# python -m pip install playwright
+# python -m playwright install chromium
+def fetch_html(url : str): 
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            user_agent = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/125.0.0.0 Safari/537.36"),
+            locale="en-US,en;q=0.9",
+            viewport={'width': 1366, 'height': 768},
+        )
+        # page = browser.new_page()
+        page = context.new_page()
+
+        # Get page contents 
+        response = page.goto(url ,
+                #   wait_until="networkidle",
+                # timeout : int =10000,
+                )
+        
+        if not response:
+            return f"ERROR accessing {url}:"
+        elif not response.ok:
+            return f"ERROR accessing {url}: {response.status}"
+
+        browser.close()
+
+        # Return FULL HTML ( too much :( )
+        # html = page.content()
+        # return html
+
+        try:
+            # Return all plain text (no formatting/structure)
+            text = page.evaluate("() => document.querySelector('article').innerText")
+        except:
+            # return FULL HTML of page
+            text = page.content() 
+
+        return text
+
+# print("URL CONTENTS\n", fetch_html("https://medium.com/@Shamimw/i-struggled-with-pydantic-parser-because-i-chose-the-wrong-model-36fb11c6ec22"))
+# print("URL CONTENTS\n", fetch_html("https://webwork.bridgew.edu/oer/Business_Calculus/ch-functions.html"))
+
 import requests
 def visit_url( url : str , **kwargs ):
     try:
-        print("Retrieving raw url: ", url)
         tracker_no_dos.wait()
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        return response.text
+        print("Getting contents of =", url)
+
+        # response = requests.get(url, timeout=10)
+        # response.raise_for_status()
+        # text = response.text
+
+        text = fetch_html(url)
+
+        return text
     except Exception as e:
         return f"Error getting {url}, with error {e}"
 visit_tool = freemodel.register_tool(
@@ -263,15 +317,15 @@ multimodal_query_tool = freemodel.register_tool(
         "query":    {"type" : "string", "description" : "The question I want to ask about the image or video."},
         "location": {"type" : "string", "description" : "The filename or url of the image or video I am interested in."},
     })
-mmqtest =  multimodal_query(
-    # "cca530fc-4052-43b2-b130-b30968d8aa44.png",
-    "99c9cc74-fdc8-46c6-8f8d-3ce2d3bfeea3.mp3",
-    "Describe the contents of this file",
-    #
-    # "https://hips.hearstapps.com/hmg-prod/images/wisteria-in-bloom-royalty-free-image-1653423554.jpg", 
-    # "What is the color of this flower?", 
-    model=freemodel)
-print("Multimodal query\n",mmqtest)
+# mmqtest =  multimodal_query(
+#     # "cca530fc-4052-43b2-b130-b30968d8aa44.png",
+#     "99c9cc74-fdc8-46c6-8f8d-3ce2d3bfeea3.mp3",
+#     "Describe the contents of this file",
+#     #
+#     # "https://hips.hearstapps.com/hmg-prod/images/wisteria-in-bloom-royalty-free-image-1653423554.jpg", 
+#     # "What is the color of this flower?", 
+#     model=freemodel)
+# print("Multimodal query\n",mmqtest)
 
 
 keep_going  = True
@@ -288,14 +342,14 @@ final_answer_tool = freemodel.register_tool(
         "answer": {"type" : "string", "description" : "Your FINAL ANSWER to the original question."},
     }
 )    
-# tools = [visit_tool,search_tool,final_answer_tool]
+tools = [visit_tool,search_tool,final_answer_tool]
 # tools = [visit_summary_tool,search_tool,final_answer_tool]
-tools = [visit_bleach_tool,search_tool,multimodal_query_tool,final_answer_tool]
+# tools = [visit_bleach_tool,search_tool,multimodal_query_tool,final_answer_tool]
 
 
-question_subset = [question_dictionary[0]]
+# question_subset = [question_dictionary[0]]
 # question_subset = question_dictionary[4:5]
-# question_subset = question_dictionary
+question_subset = question_dictionary
 for stage, raw_task in enumerate( question_subset ):
     print(f"================ Question {stage+1} of {len(question_subset) } ================")
     # agent.add_memory("My goal is to find the breed of the cat with the softest fur. \n I must complete this search in a limited number of stages.")

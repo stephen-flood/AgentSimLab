@@ -400,6 +400,8 @@ class GeminiModel(SimpleModel):
         # 1. binary/file/media parts
         for ref in attachment_names:
             contents_list.append(self._part_from_ref(ref))
+            # processed_ref = prep_file(ref) 
+            # contents_list.append(processed_ref)
 
         # 2. optional system instruction
         if system_prompt:
@@ -482,10 +484,161 @@ class GeminiModel(SimpleModel):
             if "youtube.com" in ref:
                 return gtypes.Part.from_uri(file_uri=ref, mime_type="video/mp4")
             mime, _ = mimetypes.guess_type(ref)
-            return gtypes.Part.from_bytes(data=requests.get(ref).content, mime_type=mime)
+            file_content = requests.get(ref).content
+            return gtypes.Part.from_bytes(data=file_content, mime_type=mime)
         mime, _ = mimetypes.guess_type(ref)
-        with open(ref, "rb") as fh:
-            return gtypes.Part.from_bytes(data=fh.read(), mime_type=str(mime) )
+        # with open(ref, "rb") as fh:
+        #     return gtypes.Part.from_bytes(data=fh.read(), mime_type=str(mime) )
+        return prep_file(ref)
+
+## o3 written file conversion supporters  for Gemini Models 6/2025 ##
+import os
+from io import BytesIO
+from google.genai import types as gtypes
+from PIL import Image
+import pandas as pd
+import librosa
+import soundfile as sf
+import imageio_ffmpeg as iioff # pip install imageio-ffmpeg
+import subprocess
+import tempfile
+
+# Allowed MIME mappings for quick reference
+_IMAGE_MIME = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp"
+}
+_AUDIO_MIME = {
+    ".mp3": "audio/mpeg",   # or audio/mp3
+    ".mpeg": "audio/mpeg",
+    ".wav": "audio/wav",
+    ".flac": "audio/flac",
+    ".m4a": "audio/mp4",    # MPEG-4 audio
+    ".aac": "audio/aac",
+    ".opus": "audio/opus",
+    ".webm": "audio/webm"   # WebM container (usually Opus codec)
+}
+_TEXT_TYPES = {  # extensions considered as plain text/code
+    ".txt", ".py", ".js", ".ts", ".java", ".c", ".cpp", ".cs", ".json", ".md"
+}
+# Note: .csv will be handled separately (as CSV), and .pdf is a document type.
+
+def _prep_image(file_path: str) -> gtypes.Part:
+    """Validate and preprocess an image file. Resize if too large and convert format if needed."""
+    ext = os.path.splitext(file_path)[1].lower()
+    img = Image.open(file_path)
+    # Optionally convert modes (e.g., CMYK to RGB) if necessary
+    if img.mode not in ("RGB", "RGBA"):
+        img = img.convert("RGB")
+    # Resize image if too large (max 2048 px on longest side recommended)
+    max_dim = max(img.width, img.height)
+    if max_dim > 2048:
+        scale = 2048.0 / max_dim
+        new_size = (int(img.width * scale), int(img.height * scale))
+        img = img.resize(new_size, Image.Resampling.LANCZOS)
+    # Determine output format and MIME
+    if ext in _IMAGE_MIME: # Keep accepted images in original format
+        mime_type = _IMAGE_MIME[ext]
+        fmt = ext.lstrip(".").upper().replace("JPG", "JPEG") # Set mime type using extension, except .jpg which should be JPEG (not JPG)
+    elif ext in {".bmp", ".tif", ".tiff"}: 
+        # Convert unsupported image formats (bmp, tiff) to PNG
+        mime_type = "image/png"
+        fmt = "PNG"
+    # Save image to bytes
+    buffer = BytesIO()
+    img.save(buffer, format=fmt)
+    data = buffer.getvalue()
+    buffer.close()
+    # TODO/Optional: check file size and downsample large files
+    return gtypes.Part.from_bytes(data=data, mime_type=mime_type)
+
+
+def _prep_audio(file_path: str) -> gtypes.Part:
+    ffmpeg_exe = iioff.get_ffmpeg_exe()
+    path = file_path
+    try:
+        # First try direct loading
+        y, sr = librosa.load(path, sr=16000, mono=True)
+    except Exception:
+        # Attempt a single re-encode pass with ffmpeg
+        tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        try:
+            subprocess.run(
+                [ ffmpeg_exe, "-y", "-i", path,
+                  "-ar", "16000", "-ac", "1", "-vn", tmp.name ],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+        except subprocess.CalledProcessError:
+            raise ValueError(f"Unable to decode audio file `{path}`; it may be corrupted.")
+        y, sr = librosa.load(tmp.name, sr=16000, mono=True)
+
+    # Write out as PCM-16 WAV
+    buf = BytesIO()
+    sf.write(buf, y, sr, format="WAV", subtype="PCM_16")
+    return gtypes.Part.from_bytes(data=buf.getvalue(), mime_type="audio/wav")
+    # """Validate and preprocess an audio file. Convert to 16kHz mono WAV if not already in that format."""
+    # ext = os.path.splitext(file_path)[1].lower()
+    # if ext not in _AUDIO_MIME:
+    #     raise ValueError(f"Unsupported audio format: {ext}. Supported types include MP3, WAV, FLAC, AAC, M4A, Opus.")
+    # # We'll attempt to load and resample the audio to 16 kHz mono PCM
+    # y, sr = librosa.load(file_path, sr=16000, mono=True)
+    # # Write to WAV (PCM 16-bit)
+    # buffer = BytesIO()
+    # sf.write(buffer, y, 16000, format='WAV', subtype='PCM_16')
+    # data = buffer.getvalue()
+    # buffer.close()
+    # # Final MIME as WAV
+    # mime_type = "audio/wav"
+    # # TODO/Optional: check file size and downsample large files
+    # return gtypes.Part.from_bytes(data=data, mime_type=mime_type)
+
+def _prep_csv(file_path: str) -> gtypes.Part:
+    """Read a CSV/TSV file and return as text/csv Part. Ensure UTF-8 encoding."""
+    with open(file_path, "r", encoding="utf-8") as f:
+        text = f.read()
+    data = text.encode("utf-8")
+    mime_type = "text/csv"  
+    return gtypes.Part.from_bytes(data=data, mime_type=mime_type)
+
+
+def _prep_excel(file_path: str) -> gtypes.Part:
+    """Convert an Excel .xls or .xlsx file to CSV and return as Part."""
+    df = pd.read_excel(file_path, sheet_name=0)
+    csv_text = df.to_csv(index=False)
+    data = csv_text.encode("utf-8")
+    return gtypes.Part.from_bytes(data=data, mime_type="text/csv")
+
+def _prep_code(file_path: str) -> gtypes.Part:
+    with open(file_path, "r", encoding="utf-8") as f:
+        text = f.read()
+    return gtypes.Part.from_text(text=text)
+
+def _prep_pdf(file_path: str) -> gtypes.Part:
+    data = open(file_path, "rb").read()
+    return gtypes.Part.from_bytes(data=data, mime_type="application/pdf")
+
+def prep_file(file_path: str):
+    """Dispatch to the appropriate prep function based on file extension."""
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext in _IMAGE_MIME or ext in {".bmp", ".tif", ".tiff"}:
+        return _prep_image(file_path)
+    if ext in _AUDIO_MIME:
+        return _prep_audio(file_path)
+    if ext in [".csv", ".tsv"]:
+        return _prep_csv(file_path)
+    if ext in [".xls", ".xlsx"]:
+        return _prep_excel(file_path)
+    if ext == ".pdf":
+        return _prep_pdf(file_path)
+    if ext in _TEXT_TYPES:
+        return _prep_code(file_path)
+    # If none matched:
+    raise ValueError(f"File type {ext} is not supported for inline attachments in Gemini.")
+
 
 ###############################################################################
 # HTTP based access 
