@@ -6,8 +6,8 @@ import time
 # Google free, NO native function calling
 # freemodel = GeminiModel("gemma-3-27b-it", 25, 1000, native_tool = False)
 #
-# freemodel = GeminiModel("gemini-2.0-flash-lite", 25, 1000)
-freemodel= GeminiModel("gemini-2.0-flash", 15, 1000)
+freemodel = GeminiModel("gemini-2.0-flash-lite", 25, 1000)
+# freemodel= GeminiModel("gemini-2.0-flash", 15, 1000)
 # freemodel= GeminiModel("gemini-2.5-flash-preview-04-17", 10, 1000)
 # freemodel= GeminiModel("gemini-2.5-flash-preview-04-17", 8, 1000)
 
@@ -76,7 +76,9 @@ def web_search( search_query : str , **kwargs ):
 # Step 2: create the tool object
 search_tool = freemodel.register_tool(
     web_search,
-    "Retrieves a list of website URL's relevant to the search query.",
+    # "Retrieves a list of website URL's relevant to the search query.",
+    "Retrieves a list of website URL's (addresses) relevant to the search query.  "
+    "You must use a DIFFERENT tool to extract the page contents.", # Apparently needed for weaker models
     {
         "search_query": {"type" : "string", "description" : "A query for an online search.  This could be a question you want answered, a text fragment you want context for, the name of a file you are trying to find, or anything else."},
     })
@@ -113,14 +115,19 @@ def fetch_html(url : str):
         elif not response.ok:
             return f"ERROR accessing {url}: {response.status}"
 
-        # browser.close()
+        browser.close()
 
         # Return FULL HTML ( too much :( )
         # html = page.content()
         # return html
 
-        # Return all plain text
-        text = page.evaluate("() => document.querySelector('article').innerText")
+        try:
+            # Return all plain text (no formatting/structure)
+            text = page.evaluate("() => document.querySelector('article').innerText")
+        except:
+            # return FULL HTML of page
+            text = page.content() 
+
         return text
 
 # print("URL CONTENTS\n", fetch_html("https://medium.com/@Shamimw/i-struggled-with-pydantic-parser-because-i-chose-the-wrong-model-36fb11c6ec22"))
