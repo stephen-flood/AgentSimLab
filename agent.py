@@ -83,7 +83,9 @@ class SelfCompressingMemory():
       self.length = len(compressed_memory)
 
       try:
-        self.memories = yaml.safe_load(compressed_memory)
+        # add_memory assumes existence of self.memories.append(...)
+        # but an LLM might output a single string which parses as a string (not a list)
+        self.memories = [yaml.safe_load(compressed_memory)]
       except:
         self.memories = [compressed_memory]
 
@@ -170,19 +172,26 @@ class SimpleAgent:
   def __str__(self):
     return self.description()
   
-  def add_memory(self, memory_string):
-    if "memory" in self.attribute_dictionary:
-      self.attribute_dictionary["memory"].add_memory( memory_string )
+  def add_memory(self, 
+                 memory_string : str, 
+                 memory_variable : str | None  = None):
+    if memory_variable == None:
+      memory_variable = "memory"
+    if memory_variable in self.attribute_dictionary:
+      self.attribute_dictionary[memory_variable].add_memory( memory_string )
       return 
     else:
       raise ValueError(f"Error: {self.name} has no memory object to store {memory_string}")
 
-  def clear_memory(self):
-    if "memory" in self.attribute_dictionary:
-      self.attribute_dictionary["memory"].clear_memory()
+  def clear_memory(self, memory_variable : str | None = None):
+    if memory_variable == None:
+      memory_variable = "memory"
+    
+    if memory_variable in self.attribute_dictionary:
+      self.attribute_dictionary[memory_variable].clear_memory()
       return 
     else:
-      raise ValueError(f"Error: {self.name} has no memory object to store {memory_string}")
+      raise ValueError(f"Error: {self.name} has no memory object to clear")
 
   def generate_plan(self,**kwargs):    
     """

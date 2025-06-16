@@ -269,7 +269,7 @@ class SimpleModel(ABC):
         results: List[Tuple[Any, Any]] = []
         for name, args, raw in calls:
             # Pass both the LLM supplied arguments AND the user defined **kwargs 
-            merged = {**args, **kwargs}
+            merged = {**(args or {}), **(kwargs or {})}
             if name in self.tool_registry:
                 try:    
                     out = self.tool_registry[name]["function"](**merged)
