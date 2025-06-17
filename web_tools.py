@@ -1,11 +1,13 @@
 from model import SimpleModel, RateLimitTracker
 from agent import SimpleAgent
-from googlesearch import search  # REQUIRES  pip install googlesearch-python 
-from playwright.sync_api import sync_playwright
+from googlesearch import search  
+    # pip install googlesearch-python 
+from playwright.sync_api import sync_playwright 
+    # python -m pip install playwright
+    # python -m playwright install chromium
 import requests
 import bleach
-# python -m pip install playwright
-# python -m playwright install chromium
+import html2text
 
 
 tracker_no_dos = RateLimitTracker(10)
@@ -20,8 +22,28 @@ def web_search( search_query : str , **kwargs ):
         print("Error searching:",search_query)
         return ["Error in search for ",search_query]
 
-def fetch_html(url : str): 
+test_query = "What is the height of the tallest skyscraper?"
+print("WEB SEARCH TEST\n", web_search(test_query))
+
+
+def get_url( url : str ):
+    """ Use requests library to get contents """
+    response = requests.get(url, timeout=10)
+    response.raise_for_status()
+    return response.text
+
+
+def robust_get_page_text(url : str): 
+    """
+    Use playwright to access contents of Javascript generated websites, 
+    Optionally process page contents
+        - full html converted to markdown
+        - internal text only
+        - other?
+    """
     with sync_playwright() as p:
+        # create browser, context, and page
+        # provide a plausible context to avoid blockers
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(
             user_agent = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -30,49 +52,34 @@ def fetch_html(url : str):
             locale="en-US,en;q=0.9",
             viewport={'width': 1366, 'height': 768},
         )
-        # page = browser.new_page()
         page = context.new_page()
 
         # Get page contents 
-        response = page.goto(url ,
-                #   wait_until="networkidle",
-                # timeout : int =10000,
-                )
+        response = page.goto(url)
         
         if not response:
             return f"ERROR accessing {url}:"
         elif not response.ok:
             return f"ERROR accessing {url}: {response.status}"
-
+        try:
+            print("returning html as markdown")
+            # return FULL HTML of page
+            rawhtml = page.content() 
+            text = html2text.html2text(rawhtml)
+        except:
+            print("returning contents")
+            # Return all plain text (no formatting/structure)
+            text = page.evaluate("() => document.body.innerText")
+ 
         browser.close()
 
-        # Return FULL HTML ( too much :( )
-        # html = page.content()
-        # return html
-
-        try:
-            # Return all plain text (no formatting/structure)
-            text = page.evaluate("() => document.querySelector('article').innerText")
-        except:
-            # return FULL HTML of page
-            text = page.content() 
-
         return text
-
-def visit_url( url : str , **kwargs ):
-    try:
-        tracker_no_dos.wait()
-        print("Getting contents of =", url)
-
-        # response = requests.get(url, timeout=10)
-        # response.raise_for_status()
-        # text = response.text
-
-        text = fetch_html(url)
-
-        return text
-    except Exception as e:
-        return f"Error getting {url}, with error {e}"
+# test_url = "https://medium.com/@Shamimw/i-struggled-with-pydantic-parser-because-i-chose-the-wrong-model-36fb11c6ec22"
+# test_url = "https://webwork.bridgew.edu/oer/Business_Calculus/ch-functions.html"
+# test_url = "https://en.wikipedia.org/wiki/Mercedes_Sosa"
+test_url = "https://webwork.bridgew.edu/oer/Business_Calculus/ch-combiningfns.html"
+print("URL CONTENTS\n", robust_get_page_text(test_url))
+# robust_get_page_text(test_url)
 
 def get_bleached_contents( url:str, **kwargs):
     try:

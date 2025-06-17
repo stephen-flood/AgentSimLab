@@ -70,11 +70,17 @@ agent_mem = SelfCompressingMemory(50000,freemodel)
 # Eventually: modify by hand or have LLM explore prompts agentically
 default_plan_instruct_template = \
 """
-First, identify what {self.name} would do.  
-Then make a very short plan to achieve those goals.  
+First, identify what {self.name} would do.  Then make a very short plan to achieve those goals.  
 Find a SMALL NUMBER of concrete steps that can be taken.  
 Take available tools into account in your planning, but DO NOT do any tool calls.
+After the first stage, you should also DESCRIBE WHAT YOU LEARNED from previous observations.  THINK STEP BY STEP. 
 """
+# """
+# First, identify what {self.name} would do.  
+# Then make a very short plan to achieve those goals.  
+# Find a SMALL NUMBER of concrete steps that can be taken.  
+# Take available tools into account in your planning, but DO NOT do any tool calls.
+# """
 ###
 default_action_instruct_template = \
 """
@@ -137,10 +143,20 @@ search_tool = freemodel.register_tool(
 ## Use Chromium web browser and playwright to interpret JavaScript before parsing 
 ## Additional option: return only internal text of nodes
 from playwright.sync_api import sync_playwright
+import html2text
 # python -m pip install playwright
 # python -m playwright install chromium
 def fetch_html(url : str): 
+    """
+    Use playwright to access contents of Javascript generated websites, 
+    Optionally process page contents
+        - full html converted to markdown
+        - internal text only
+        - other?
+    """
     with sync_playwright() as p:
+        # create browser, context, and page
+        # provide a plausible context to avoid blockers
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(
             user_agent = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -149,34 +165,76 @@ def fetch_html(url : str):
             locale="en-US,en;q=0.9",
             viewport={'width': 1366, 'height': 768},
         )
-        # page = browser.new_page()
         page = context.new_page()
 
         # Get page contents 
-        response = page.goto(url ,
-                #   wait_until="networkidle",
-                # timeout : int =10000,
-                )
+        response = page.goto(url)
         
         if not response:
             return f"ERROR accessing {url}:"
         elif not response.ok:
             return f"ERROR accessing {url}: {response.status}"
-
+        try:
+            print("returning html as markdown")
+            # return FULL HTML of page
+            rawhtml = page.content() 
+            text = html2text.html2text(rawhtml)
+        except:
+            print("returning contents")
+            # Return all plain text (no formatting/structure)
+            text = page.evaluate("() => document.body.innerText")
+ 
         browser.close()
 
-        # Return FULL HTML ( too much :( )
-        # html = page.content()
-        # return html
-
-        try:
-            # Return all plain text (no formatting/structure)
-            text = page.evaluate("() => document.querySelector('article').innerText")
-        except:
-            # return FULL HTML of page
-            text = page.content() 
-
         return text
+    
+    # with sync_playwright() as p:
+    #     browser = p.chromium.launch(headless=True)
+    #     context = browser.new_context(
+    #         user_agent = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    #                       "AppleWebKit/537.36 (KHTML, like Gecko) "
+    #                       "Chrome/125.0.0.0 Safari/537.36"),
+    #         locale="en-US,en;q=0.9",
+    #         viewport={'width': 1366, 'height': 768},
+    #     )
+    #     # page = browser.new_page()
+    #     page = context.new_page()
+
+    #     # Get page contents 
+    #     response = page.goto(url ,
+    #             #   wait_until="networkidle",
+    #             # timeout : int =10000,
+    #             )
+        
+    #     if not response:
+    #         return f"ERROR accessing {url}:"
+    #     elif not response.ok:
+    #         return f"ERROR accessing {url}: {response.status}"
+
+
+    #     # Return FULL HTML ( too much :( )
+    #     # html = page.content()
+    #     # return html
+
+    #     try:
+    #         print("returning internal text")
+    #         # Return all plain text (no formatting/structure)
+    #         text = page.evaluate("() => document.querySelector('article').innerText")
+    #     except:
+    #         print("returning raw html")
+    #         # return FULL HTML of page
+    #         text = page.content() 
+
+    #         try: 
+    #             # Try using bleach to clean up the output as a fallback
+    #             new_text = get_url_contents(text)
+    #             text = new_text
+    #         except:
+    #             pass
+
+    #     browser.close()
+
+    #     return text
 
 # print("URL CONTENTS\n", fetch_html("https://medium.com/@Shamimw/i-struggled-with-pydantic-parser-because-i-chose-the-wrong-model-36fb11c6ec22"))
 # print("URL CONTENTS\n", fetch_html("https://webwork.bridgew.edu/oer/Business_Calculus/ch-functions.html"))
@@ -203,7 +261,9 @@ visit_tool = freemodel.register_tool(
         "url": {"type" : "string", "description" : "The URL of a website that I need to get the contents of."},
     })
 # Quick test
-visit_test_url = "https://www.charlottenc.gov/CATS/Home"
+# visit_test_url = "https://www.charlottenc.gov/CATS/Home"
+visit_test_url = "https://medium.com/@Shamimw/i-struggled-with-pydantic-parser-because-i-chose-the-wrong-model-36fb11c6ec22"
+# visit_url(visit_test_url)
 # print("URL CONTENTS\n", visit_url(visit_test_url))
 
 
@@ -342,8 +402,8 @@ final_answer_tool = freemodel.register_tool(
         "answer": {"type" : "string", "description" : "Your FINAL ANSWER to the original question."},
     }
 )    
-tools = [visit_tool,search_tool,final_answer_tool]
-# tools = [visit_summary_tool,search_tool,final_answer_tool]
+tools = [visit_tool,search_tool,multimodal_query_tool,final_answer_tool]
+# tools = [visit_summary_tool,search_tool,multimodal_query_tool,final_answer_tool]
 # tools = [visit_bleach_tool,search_tool,multimodal_query_tool,final_answer_tool]
 
 

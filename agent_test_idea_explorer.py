@@ -115,7 +115,6 @@ def fetch_html(url : str):
         elif not response.ok:
             return f"ERROR accessing {url}: {response.status}"
 
-        browser.close()
 
         # Return FULL HTML ( too much :( )
         # html = page.content()
@@ -127,6 +126,8 @@ def fetch_html(url : str):
         except:
             # return FULL HTML of page
             text = page.content() 
+
+        browser.close()
 
         return text
 

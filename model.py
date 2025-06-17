@@ -496,10 +496,14 @@ import os
 from io import BytesIO
 from google.genai import types as gtypes
 from PIL import Image
-import pandas as pd
-import librosa
-import soundfile as sf
-import imageio_ffmpeg as iioff # pip install imageio-ffmpeg
+try:
+    # pip install bleach pandas html2text librosa imageio-ffmpeg
+    import pandas as pd
+    import librosa
+    import soundfile as sf
+    import imageio_ffmpeg as iioff # pip install imageio-ffmpeg
+except:
+    pandas = librosa = soundfile = imageio_ffmpeg = None
 import subprocess
 import tempfile
 
@@ -556,45 +560,45 @@ def _prep_image(file_path: str) -> gtypes.Part:
 
 
 def _prep_audio(file_path: str) -> gtypes.Part:
-    ffmpeg_exe = iioff.get_ffmpeg_exe()
-    path = file_path
-    try:
-        # First try direct loading
-        y, sr = librosa.load(path, sr=16000, mono=True)
-    except Exception:
-        # Attempt a single re-encode pass with ffmpeg
-        tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-        try:
-            subprocess.run(
-                [ ffmpeg_exe, "-y", "-i", path,
-                  "-ar", "16000", "-ac", "1", "-vn", tmp.name ],
-                check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-        except subprocess.CalledProcessError:
-            raise ValueError(f"Unable to decode audio file `{path}`; it may be corrupted.")
-        y, sr = librosa.load(tmp.name, sr=16000, mono=True)
+    # ffmpeg_exe = iioff.get_ffmpeg_exe()
+    # path = file_path
+    # try:
+    #     # First try direct loading
+    #     y, sr = librosa.load(path, sr=16000, mono=True)
+    # except Exception:
+    #     # Attempt a single re-encode pass with ffmpeg
+    #     tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    #     try:
+    #         subprocess.run(
+    #             [ ffmpeg_exe, "-y", "-i", path,
+    #               "-ar", "16000", "-ac", "1", "-vn", tmp.name ],
+    #             check=True,
+    #             stdout=subprocess.DEVNULL,
+    #             stderr=subprocess.DEVNULL
+    #         )
+    #     except subprocess.CalledProcessError:
+    #         raise ValueError(f"Unable to decode audio file `{path}`; it may be corrupted.")
+    #     y, sr = librosa.load(tmp.name, sr=16000, mono=True)
 
-    # Write out as PCM-16 WAV
-    buf = BytesIO()
-    sf.write(buf, y, sr, format="WAV", subtype="PCM_16")
-    return gtypes.Part.from_bytes(data=buf.getvalue(), mime_type="audio/wav")
+    # # Write out as PCM-16 WAV
+    # buf = BytesIO()
+    # sf.write(buf, y, sr, format="WAV", subtype="PCM_16")
+    # return gtypes.Part.from_bytes(data=buf.getvalue(), mime_type="audio/wav")
     # """Validate and preprocess an audio file. Convert to 16kHz mono WAV if not already in that format."""
-    # ext = os.path.splitext(file_path)[1].lower()
-    # if ext not in _AUDIO_MIME:
-    #     raise ValueError(f"Unsupported audio format: {ext}. Supported types include MP3, WAV, FLAC, AAC, M4A, Opus.")
-    # # We'll attempt to load and resample the audio to 16 kHz mono PCM
-    # y, sr = librosa.load(file_path, sr=16000, mono=True)
-    # # Write to WAV (PCM 16-bit)
-    # buffer = BytesIO()
-    # sf.write(buffer, y, 16000, format='WAV', subtype='PCM_16')
-    # data = buffer.getvalue()
-    # buffer.close()
-    # # Final MIME as WAV
-    # mime_type = "audio/wav"
-    # # TODO/Optional: check file size and downsample large files
-    # return gtypes.Part.from_bytes(data=data, mime_type=mime_type)
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext not in _AUDIO_MIME:
+        raise ValueError(f"Unsupported audio format: {ext}. Supported types include MP3, WAV, FLAC, AAC, M4A, Opus.")
+    # We'll attempt to load and resample the audio to 16 kHz mono PCM
+    y, sr = librosa.load(file_path, sr=16000, mono=True)
+    # Write to WAV (PCM 16-bit)
+    buffer = BytesIO()
+    sf.write(buffer, y, 16000, format='WAV', subtype='PCM_16')
+    data = buffer.getvalue()
+    buffer.close()
+    # Final MIME as WAV
+    mime_type = "audio/wav"
+    # TODO/Optional: check file size and downsample large files
+    return gtypes.Part.from_bytes(data=data, mime_type=mime_type)
 
 def _prep_csv(file_path: str) -> gtypes.Part:
     """Read a CSV/TSV file and return as text/csv Part. Ensure UTF-8 encoding."""
