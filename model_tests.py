@@ -23,7 +23,8 @@ import pprint
 freemodel = GeminiModel(
     "gemini-2.0-flash-lite", 
     30,
-    native_tool = True,
+    native_tool = False,
+    allow_system_prompt = False,
     verbose=False,
     )
 
@@ -49,10 +50,10 @@ freemodel = GeminiModel(
 
 """## Model Wrapper: Example Usage"""
 
-test_prompt = False
-test_tools = False
-test_multimodal = True
-test_history = False
+test_prompt = True
+test_tools = True
+test_multimodal = False
+test_history = True
 
 if test_prompt :
   print("============== PROMPT TEST 1 ==============")

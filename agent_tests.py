@@ -17,14 +17,14 @@ mem_support  = SimpleMemory()
 
 print(str(mem_support))
 
-# freemodel = GeminiModel("gemini-2.0-flash-lite", 30, 1000)
+freemodel = GeminiModel("gemini-2.0-flash-lite", 30, 1000)
 # freemodel = GeminiModel("gemini-2.5-flash-preview-04-17", 10, 1000)
 # freemodel = HTTPChatModel("mistral-small:24b-instruct-2501-q4_K_M")
-freemodel = HTTPChatModel("gemma3:12b", 
-                          native_tool=False, 
-                        #   verbose=True,
-                          verbose=False,
-                          )
+# freemodel = HTTPChatModel("gemma3:12b", 
+#                           native_tool=False, 
+#                         #   verbose=True,
+#                           verbose=False,
+#                           )
 
 
 # freemodel = HFTransformersModel(

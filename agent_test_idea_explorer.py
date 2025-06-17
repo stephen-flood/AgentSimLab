@@ -5,8 +5,9 @@ import time
 
 # Google free, NO native function calling
 # freemodel = GeminiModel("gemma-3-27b-it", 25, 1000, native_tool = False)
+freemodel = GeminiModel("gemini-2.0-flash-lite", 25, 1000, native_tool = False, allow_system_prompt=False)
 #
-freemodel = GeminiModel("gemini-2.0-flash-lite", 25, 1000)
+# freemodel = GeminiModel("gemini-2.0-flash-lite", 25, 1000)
 # freemodel= GeminiModel("gemini-2.0-flash", 15, 1000)
 # freemodel= GeminiModel("gemini-2.5-flash-preview-04-17", 10, 1000)
 # freemodel= GeminiModel("gemini-2.5-flash-preview-04-17", 8, 1000)

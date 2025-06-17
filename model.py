@@ -3,24 +3,30 @@ import yaml # used to format prompts
 import pprint
 
 """llm_models.py
-Refactored, library-agnostic wrapper classes for interacting with various LLM
-back-ends **while preserving the original public API**.  Concrete subclasses
-handle provider-specific details; the shared logic never inspects response
-objects directly.
+Library-agnostic wrapper classes for interacting with various LLM
+back-ends **while preserving a single original public API**.  
+
+Written with the assistance of o3.  
+- o3 did lots of research, wrote initial pass of most methods
+- manually edited, simplified, and rewrote portions
+- occasionally used o3 for a pass of edits and/or help refactoring
 
 Public surface
 --------------
-* ``generate_content`` (alias ``generate``)
-* ``register_tool`` / ``get_tool``
-* ``apply_tool``
-* ``print_response``
+- General Interaction with LLM
+    - ``generate_content`` : send LLM query 
+    - ``response_text`` : extract text portion of model response 
+- Tool methods
+    - ``register_tool`` : register new tool with model
+    - ``get_tool``      : get tool from string
+    * ``_iter_tool_calls`` : extracts tool calls from response 
+                             as list of ``(name, args, raw)`` triples
+    - ``apply_tool``    : automatically handles applying the tool calls in a model response
 
 Internal abstraction points
 ---------------------------
 * ``_generate``            - provider API call
 * ``_create_tool_object``  - translate tool metadata
-* ``_iter_tool_calls``     - yield ``(name, args, raw)`` triples
-* ``response_text``       - extract printable text
 """
 
 from abc import ABC, abstractmethod
@@ -34,7 +40,8 @@ __all__ = [
     "RateLimitTracker",
     "SimpleModel",
     "GeminiModel",
-    # "OpenApiModel",
+    "HTTPChatModel",
+    "HFTransformersModel",
 ]
 
 ###############################################################################
@@ -74,9 +81,9 @@ class RateLimitTracker:
             return 0
         average_wait = 60 / self.per_min_limit
         n = len(self.history)
-        # Spend the first quarter of the budget immediately
-        # Spend the second quarter of the budget a bit quickly
-        # Spend spend the second half slowly enough to avoid rate limiting
+        #  first quarter of the budget spent immediately
+        #  second quarter of the budget spent a bit quickly
+        #  second half of budget spent slowly enough to avoid rate limiting
         if n < self.per_min_limit // 4:
             return 0.0
         if n < self.per_min_limit // 2:
@@ -113,7 +120,6 @@ class SimpleModel(ABC):
         self.tool_registry: Dict[str, Dict[str, Any]] = {}
         self.verbose = verbose
         self.native_tool = kwargs["native_tool"] if "native_tool" in kwargs else True
-
         self.allow_system_prompt = kwargs["allow_system_prompt"] if "allow_system_prompt" in kwargs else True
 
     # ------------------------------------------------------------------
@@ -146,15 +152,8 @@ class SimpleModel(ABC):
 
             tools_provided = kwargs["tools"]
             # Embed tool instructions in system prompt
-            # 1. Build tool description block
             tool_persona = "You have access to the following tools."
             tools_block = yaml.dump(tools_provided)
-            # tools_block = []
-            # for spec in self._tools:
-                # tools_block.append(
-                #     f"- {spec['name']} :: {spec['description']}  "
-                #     f"params = {json.dumps(spec['parameters']['properties'])}"
-                # )
             guard = (
                 "You may call **one** function. "
                 "If you do, respond with *only* this JSON:\n"
@@ -178,7 +177,7 @@ class SimpleModel(ABC):
             system_prompt = kwargs.pop("system_prompt")
             user_prompt = kwargs["user_prompt"] if "user_prompt" else ""
             kwargs["user_prompt"] = "BEGIN SYSTEM PROMPT\n" \
-                                    + system_prompt         \
+                                    + str(system_prompt)         \
                                     + "\nEND SYSTEM PROMPT\n\nBEGIN USER PROMPT\n" \
                                     + user_prompt           \
                                     + "\n END USER PROMPT"
@@ -400,8 +399,6 @@ class GeminiModel(SimpleModel):
         # 1. binary/file/media parts
         for ref in attachment_names:
             contents_list.append(self._part_from_ref(ref))
-            # processed_ref = prep_file(ref) 
-            # contents_list.append(processed_ref)
 
         # 2. optional system instruction
         if system_prompt:
@@ -466,11 +463,34 @@ class GeminiModel(SimpleModel):
         )
 
     def _iter_tool_calls(self, response):
-        calls = getattr(response, "function_calls", [])
-        if calls is not None:
-            return [(c.name, c.args, c) for c in calls]
+        if self.native_tool:
+            calls = getattr(response, "function_calls", [])
+            if calls is not None:
+                return [(c.name, c.args, c) for c in calls]
+            else:
+                return None
         else:
-            return None
+            try:
+                # pull the text between the first and last bracket
+                # ASSUMES the model outputs a SINGLE tool call
+                response_message = self.response_text(response)
+                first = response_message.index("{")
+                last  = response_message.rindex("}") + 1
+                tool_json = json.loads(response_message[first:last])
+                # Extract function and arguments from json
+                function_name = tool_json.get("function")
+                args = tool_json.get("arguments")
+                if self.verbose:
+                    print(function_name)
+                    pprint.pp(args)
+                    pprint.pp(response)
+                # Extract calls using regexp
+                # Extract name and arguments from call
+                # Return in appropriate format
+                # print("Error: Non-native tool calling not yet implemented")
+                return [(function_name,args,response)]
+            except:
+                return[("Error: tool call must be valid json of correct format",{},response_message)]
 
     def response_text(self, response):
         return getattr(response, "text", "")
@@ -485,7 +505,7 @@ class GeminiModel(SimpleModel):
                 return gtypes.Part.from_uri(file_uri=ref, mime_type="video/mp4")
             mime, _ = mimetypes.guess_type(ref)
             file_content = requests.get(ref).content
-            return gtypes.Part.from_bytes(data=file_content, mime_type=mime)
+            return gtypes.Part.from_bytes(data=file_content, mime_type=str(mime))
         mime, _ = mimetypes.guess_type(ref)
         # with open(ref, "rb") as fh:
         #     return gtypes.Part.from_bytes(data=fh.read(), mime_type=str(mime) )
@@ -560,31 +580,6 @@ def _prep_image(file_path: str) -> gtypes.Part:
 
 
 def _prep_audio(file_path: str) -> gtypes.Part:
-    # ffmpeg_exe = iioff.get_ffmpeg_exe()
-    # path = file_path
-    # try:
-    #     # First try direct loading
-    #     y, sr = librosa.load(path, sr=16000, mono=True)
-    # except Exception:
-    #     # Attempt a single re-encode pass with ffmpeg
-    #     tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-    #     try:
-    #         subprocess.run(
-    #             [ ffmpeg_exe, "-y", "-i", path,
-    #               "-ar", "16000", "-ac", "1", "-vn", tmp.name ],
-    #             check=True,
-    #             stdout=subprocess.DEVNULL,
-    #             stderr=subprocess.DEVNULL
-    #         )
-    #     except subprocess.CalledProcessError:
-    #         raise ValueError(f"Unable to decode audio file `{path}`; it may be corrupted.")
-    #     y, sr = librosa.load(tmp.name, sr=16000, mono=True)
-
-    # # Write out as PCM-16 WAV
-    # buf = BytesIO()
-    # sf.write(buf, y, sr, format="WAV", subtype="PCM_16")
-    # return gtypes.Part.from_bytes(data=buf.getvalue(), mime_type="audio/wav")
-    # """Validate and preprocess an audio file. Convert to 16kHz mono WAV if not already in that format."""
     ext = os.path.splitext(file_path)[1].lower()
     if ext not in _AUDIO_MIME:
         raise ValueError(f"Unsupported audio format: {ext}. Supported types include MP3, WAV, FLAC, AAC, M4A, Opus.")
@@ -863,10 +858,7 @@ class HTTPChatModel(SimpleModel):
                     try:   args = json.loads(args_raw)
                     except json.JSONDecodeError: args = {}
 
-                # if name:
                 calls.append((name, args, tc))
-                # print(tc)
-                # print(name, args_raw)
 
             return calls
         
@@ -906,9 +898,6 @@ class HTTPChatModel(SimpleModel):
             # print("ERROR parsing response text.  Full response:", str)
             return str(response)
 
-###############################################################################
-# Hugging Face Transformers  (transformers ≥ 4.41 recommended)
-###############################################################################
 ###############################################################################
 # Hugging Face Transformers (transformers ≥ 4.41)
 ###############################################################################

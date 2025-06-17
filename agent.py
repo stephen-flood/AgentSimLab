@@ -90,7 +90,7 @@ class SelfCompressingMemory():
         self.memories = [compressed_memory]
 
       if self.length > self.max_chars:
-        print("ERROR: memory compression FAILED")
+        print("ERROR: memory compression FAILED.  Produce a shorter summary next time.")
         if self.verbose: 
           print(compressed_memory) 
           raise ValueError("Failure compressing memory.")
@@ -152,9 +152,6 @@ class SimpleAgent:
     default_plan_instruct_template = "First, identify what {self.name} would do.  Then make a very short plan to achieve those goals.  Find a SMALL NUMBER of concrete steps that can be taken.  Take available tools into account in your planning, but DO NOT do any tool calls."
     default_action_instruct_template = "What would {self.name} do? "
     default_speech_instruct_template = "What would {self.name} say?"
-    # self.plan_instruct_template = kwargs.pop("plan_instruct_template", default_plan_instruct_template)
-    # self.action_instruct_template = kwargs.pop("action_instruct_template", default_action_instruct_template)
-    # self.speech_instruct_template = kwargs.pop("speech_instruct_template", default_speech_instruct_template)
     self.plan_instruct_template   = plan_instruction_template   or default_plan_instruct_template
     self.action_instruct_template = action_instruction_template or default_action_instruct_template
     self.speech_instruct_template = speech_instruction_template or default_speech_instruct_template
@@ -199,16 +196,8 @@ class SimpleAgent:
     """
     prompt_dict = kwargs
     prompt_dict["name"] = self.name
-    # prompt_dict["instruction"] = f"First, identify what would {self.name} do.  Then make a very short plan to achieve those goals.  Find a SMALL NUMBER of concrete steps that can be taken.  Take available tools into account in your planning, but DO NOT do any tool calls."
     prompt_dict["instruction"] = self.plan_instruct_template.format(self=self, kwargs=kwargs)
-
-    ## OPTIONAL: automatically include full description of location
-    ## ALTERNATIVE: provide "get_room_description" tool that agent can call
-    # if "location" in self.attribute_dictionary:
-    #   prompt_dict["current location"] = self.attribute_dictionary["location"].name
-
     response = self.generate_content(**prompt_dict)    
-
     return self.model.response_text(response)
 
 
@@ -219,15 +208,6 @@ class SimpleAgent:
     prompt_dict = kwargs
     prompt_dict["name"] = self.name
     prompt_dict["instruction"] = self.action_instruct_template.format(self=self, kwargs=kwargs)
-    # prompt_dict["instruction"] = f"What would {self.name} do? "
-    # if "system" not in kwargs and "tools" in kwargs: 
-    #   prompt_dict["system"] = f"You are {self.model.model_name}, a tool using model from Google. Use tools when needed."
-
-    ## OPTIONAL: automatically include full description of location
-    ## ALTERNATIVE: provide "get_room_description" tool that agent can call
-    # if "location" in self.attribute_dictionary:
-    #   prompt_dict["current location"] = self.attribute_dictionary["location"].name
-
     response = self.generate_content(**prompt_dict)    
 
     return response
@@ -243,12 +223,6 @@ class SimpleAgent:
     #   prompt_dict["instruction"] = f"What would {self.name} say to {kwargs["interlocutor_name"]}?"
     # else:
     #   prompt_dict["instruction"] = f"What would {self.name} say?"
-
-    ## OPTIONAL: automatically include full description of location
-    ## ALTERNATIVE: provide "get_room_description" tool that agent can call
-    # if "location" in self.attribute_dictionary:
-    #   prompt_dict["current location"] = self.attribute_dictionary["location"].name
-
     response = self.generate_content(**prompt_dict)    
     return self.model.response_text(response)
 
@@ -269,8 +243,7 @@ class SimpleAgent:
     IMPORTANT:
       - (all objects stored in attribute_dictionary MUST have a __str__ method).
     """
-    # model_params = kwargs["model_parameters"] if "model_parameters" in kwargs else {}
-    special_args = ["model_parameters"]
+    special_args = ["model_parameters","tools"]
     if "model_parameters" in kwargs:
       model_params = kwargs["model_parameters"] 
     elif "tools" in kwargs:
